@@ -25,6 +25,9 @@ public:
 
 signals:
     void selectionReady(const QString &text);
+    // Emitted when the PRIMARY selection becomes empty (user clicked away /
+    // deselected); lets the UI dismiss any selection-dependent chrome.
+    void selectionCleared();
 
 private:
     void onSelectionChanged();

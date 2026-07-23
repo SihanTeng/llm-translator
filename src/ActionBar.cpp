@@ -12,11 +12,26 @@
 using namespace Qt::StringLiterals;
 
 ActionBar::ActionBar(QWidget *parent)
-    : QWidget(parent, Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
+    : QWidget(parent, [] {
+        // On X11 a normal window that appears without taking focus makes
+        // GNOME Shell post a "<app> is ready" notification. A tooltip-type
+        // window (override-redirect) avoids that; the bar never takes focus
+        // anyway. On Wayland, window placement/typing is the compositor's
+        // business, so keep a plain frameless window there.
+        Qt::WindowFlags flags = Qt::Window | Qt::FramelessWindowHint
+                              | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
+        if (QGuiApplication::platformName() == "xcb"_L1)
+            flags = Qt::ToolTip | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
+        return flags;
+    }())
     , m_button(new QToolButton(this))
     , m_autoHide(new QTimer(this))
 {
     setAttribute(Qt::WA_DeleteOnClose, false);
+    // Never steal keyboard focus: the user must still be able to Ctrl+C the
+    // selection in the source app while the bar is visible.
+    setAttribute(Qt::WA_ShowWithoutActivating);
+    setAttribute(Qt::WA_X11DoNotAcceptFocus);
 
     m_button->setText(tr("Translate"));
     m_button->setCursor(Qt::PointingHandCursor);
@@ -76,7 +91,6 @@ void ActionBar::offer(const QPoint &globalPos)
     m_autoHide->start();
     show();
     raise();
-    activateWindow();
 }
 
 void ActionBar::keyPressEvent(QKeyEvent *event)

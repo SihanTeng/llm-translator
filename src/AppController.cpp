@@ -26,6 +26,8 @@ AppController::AppController(QObject *parent)
 
     connect(m_monitor, &SelectionMonitor::selectionReady,
             this, &AppController::onSelection);
+    connect(m_monitor, &SelectionMonitor::selectionCleared,
+            m_actionBar, &QWidget::hide);
     connect(m_actionBar, &ActionBar::translateRequested,
             this, &AppController::startPendingTranslation);
     connect(m_actionBar, &ActionBar::settingsRequested,

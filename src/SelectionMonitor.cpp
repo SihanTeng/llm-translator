@@ -28,7 +28,11 @@ SelectionMonitor::SelectionMonitor(QObject *parent)
     connect(m_debounce, &QTimer::timeout, this, [this] {
         const QString text = m_pending.trimmed();
         m_pending.clear();
-        if (text.isEmpty() || text == m_lastEmitted)
+        if (text.isEmpty()) {
+            emit selectionCleared();
+            return;
+        }
+        if (text == m_lastEmitted)
             return;
         if (text.size() < kMinLength || text.size() > kMaxLength)
             return;
