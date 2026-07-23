@@ -3,5 +3,5 @@
     "name": "Translator Selection Bridge",
     "description": "Forwards PRIMARY (mouse-highlight) selections to the translator app over D-Bus.",
     "shell-version": ["50"],
-    "version": 1
+    "version": 2
 }

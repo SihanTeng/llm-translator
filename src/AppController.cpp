@@ -44,7 +44,15 @@ AppController::AppController(QObject *parent)
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.registerService(QStringLiteral("org.translator.App"));
     bus.registerObject(QStringLiteral("/org/translator/App"), this,
-                       QDBusConnection::ExportAllSlots);
+                       QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
+
+    // Forward the translation stream to D-Bus for the extension's panel.
+    connect(m_client, &DeepSeekClient::tokenReceived,
+            this, &AppController::TranslationToken);
+    connect(m_client, &DeepSeekClient::requestFinished,
+            this, &AppController::TranslationFinished);
+    connect(m_client, &DeepSeekClient::errorOccurred,
+            this, &AppController::TranslationError);
 
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         auto *menu = new QMenu;
@@ -76,7 +84,19 @@ void AppController::TranslateSelection(const QString &text, int x, int y)
 {
     if (!m_settings.monitorEnabled)
         return;
+    if (m_shellUiEnabled) {
+        // The extension renders the bar and the translation panel itself;
+        // just run the request. The stream reaches it via TranslationToken.
+        m_client->cancel();
+        m_client->translate(text, buildSystemPrompt());
+        return;
+    }
     offerTranslation(text, QPoint(x, y));
+}
+
+void AppController::SetShellUiEnabled(bool enabled)
+{
+    m_shellUiEnabled = enabled;
 }
 
 void AppController::onSelection(const QString &text)

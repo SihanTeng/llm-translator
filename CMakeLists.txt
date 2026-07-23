@@ -25,3 +25,17 @@ target_link_libraries(translator PRIVATE
     Qt6::Network
     Qt6::DBus
 )
+
+# Optional KDE/wlroots popup placement via wlr-layer-shell (LayerShellQt).
+# GNOME does not support layer-shell; the GNOME Shell extension covers it.
+# Requires LayerShellQt, e.g. 'sudo dnf install layer-shell-qt' on Fedora.
+option(TRANSLATOR_WITH_LAYERSHELL "KDE/wlroots layer-shell popup placement" OFF)
+if(TRANSLATOR_WITH_LAYERSHELL)
+    find_package(LayerShellQt REQUIRED)
+    target_sources(translator PRIVATE
+        src/LayerShellPopup.cpp
+        src/CursorPosition.cpp
+    )
+    target_link_libraries(translator PRIVATE LayerShellQt::Interface)
+    target_compile_definitions(translator PRIVATE TRANSLATOR_HAVE_LAYERSHELL)
+endif()

@@ -46,14 +46,36 @@ installed extension can be enabled; afterwards run
 `gnome-extensions enable translator@translator` if it isn't already.
 
 On X11 sessions no extension is needed — the app monitors the PRIMARY
-selection directly via `QClipboard`.
+selection directly via `QClipboard` and positions its own popup.
 
 ### Wayland notes
 
-- The extension captures the selection and the pointer position, but Wayland
-  compositors decide window placement themselves — the popup appears where
-  the compositor puts new windows rather than exactly at the cursor.
-- Non-GNOME Wayland compositors are not covered by the bridge yet.
+- The extension renders the action bar and the translation panel **inside
+  GNOME Shell**, positioned exactly at the pointer — the only way to do that
+  on GNOME Wayland, which gives clients no control over window placement.
+  The Qt app stays the backend (settings, API key, streaming request) and
+  forwards tokens over D-Bus signals (`TranslationToken`, `TranslationFinished`,
+  `TranslationError`); the extension registers itself via `SetShellUiEnabled`.
+
+### KDE Plasma 6 / wlroots (Sway, Hyprland, …)
+
+KWin and wlroots compositors support the `wlr-layer-shell` protocol, which
+allows exact popup placement with plain Qt (LayerShellQt). Build with:
+
+```sh
+sudo dnf install layer-shell-qt   # Fedora
+cmake -G Ninja -B build -DTRANSLATOR_WITH_LAYERSHELL=ON [...]
+```
+
+This compiles `src/LayerShellPopup.cpp` (overlay-layer placement with no
+keyboard interactivity) and `src/CursorPosition.cpp` (pointer position via
+`hyprctl cursorpos` / `swaymsg -t get_seats`; X11 uses `QCursor::pos()`).
+
+**Status: unverified** — LayerShellQt is unavailable on GNOME, so this module
+was written but not compiled or tested here. Verify on a KDE/wlroots session
+before relying on it. Selection reading on those compositors additionally
+needs an `ext/wlr-data-control` reader (not yet implemented — as a
+workaround, XWayland selections are still visible via the X11 path).
 
 ## Usage
 
