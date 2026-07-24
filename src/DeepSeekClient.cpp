@@ -17,7 +17,7 @@ DeepSeekClient::DeepSeekClient(QObject *parent)
 {
 }
 
-void DeepSeekClient::translate(const QString &text, const QString &systemPrompt)
+void DeepSeekClient::translate(const QString &text, const QString &systemPrompt, bool jsonMode)
 {
     cancel();
 
@@ -27,9 +27,11 @@ void DeepSeekClient::translate(const QString &text, const QString &systemPrompt)
         return;
     }
 
-    const QJsonObject body{
+    m_jsonMode = jsonMode;
+
+    QJsonObject body{
         {"model"_L1, m_model},
-        {"stream"_L1, true},
+        {"stream"_L1, !jsonMode},
         // Low-latency popup: disable thinking mode (it defaults to enabled on v4 models).
         {"thinking"_L1, QJsonObject{{"type"_L1, "disabled"_L1}}},
         {"messages"_L1, QJsonArray{
@@ -37,6 +39,8 @@ void DeepSeekClient::translate(const QString &text, const QString &systemPrompt)
             QJsonObject{{"role"_L1, "user"_L1}, {"content"_L1, text}},
         }},
     };
+    if (jsonMode)
+        body["response_format"_L1] = QJsonObject{{"type"_L1, "json_object"_L1}};
 
     QNetworkRequest request(QUrl(m_baseUrl + "/chat/completions"_L1));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"_L1);
@@ -68,6 +72,8 @@ void DeepSeekClient::onReadyRead()
         return;
 
     m_buffer += m_reply->readAll();
+    if (m_jsonMode)
+        return; // body is parsed whole in onFinished()
 
     // SSE: consume complete "data: <json>" lines as they arrive.
     while (true) {
@@ -103,8 +109,10 @@ void DeepSeekClient::onFinished()
     if (!reply)
         return;
 
-    // Drain any final chunk before evaluating the result.
-    onReadyRead();
+    // Drain any final chunk before evaluating the result. Skipped in JSON
+    // mode: the whole response body is needed intact below.
+    if (!m_jsonMode)
+        onReadyRead();
     m_reply = nullptr;
 
     const QNetworkReply::NetworkError error = reply->error();
@@ -112,13 +120,28 @@ void DeepSeekClient::onFinished()
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         QString detail = QString::fromUtf8(reply->readAll()).trimmed();
         if (detail.size() > 300)
-            detail = detail.left(300) + "…"_L1;
+            detail = detail.left(300) + u"…"_s;
         emit errorOccurred(status > 0
             ? tr("DeepSeek request failed (HTTP %1): %2").arg(status).arg(detail)
             : tr("Network error: %1").arg(reply->errorString()));
     }
 
     reply->deleteLater();
-    if (error == QNetworkReply::NoError)
+    if (error == QNetworkReply::NoError) {
+        if (m_jsonMode) {
+            // Non-streamed structured response: deliver the whole JSON
+            // payload as a single token. readyRead() may already have moved
+            // (part of) the body into m_buffer.
+            const QByteArray body = m_buffer + reply->readAll();
+            const QJsonDocument doc = QJsonDocument::fromJson(body);
+            const QJsonArray choices = doc["choices"_L1].toArray();
+            if (!choices.isEmpty()) {
+                const QString content = choices[0].toObject()["message"_L1]
+                                            .toObject()["content"_L1].toString();
+                if (!content.isEmpty())
+                    emit tokenReceived(content);
+            }
+        }
         emit requestFinished();
+    }
 }

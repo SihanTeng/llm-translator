@@ -15,12 +15,14 @@ const MIN_LENGTH = 2;
 const MAX_LENGTH = 4000;
 const AUTO_HIDE_SECONDS = 8;
 
-const BAR_STYLE = 'background-color: #2d7dff; color: white; border-radius: 8px; ' +
-    'padding: 6px 14px; font-weight: bold;';
-const PANEL_STYLE = 'background-color: rgba(30,30,30,0.97); color: white; ' +
-    'border-radius: 10px; padding: 10px 12px; border: 1px solid #555;';
-const SOURCE_STYLE = 'color: #aaa; font-size: 11px;';
-const HEADER_BUTTON_STYLE = 'color: white; background-color: #444; border-radius: 4px; padding: 2px 10px;';
+const BAR_STYLE = 'background-color: #2d7dff; color: white; border-radius: 10px; ' +
+    'padding: 8px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);';
+const PANEL_STYLE = 'background-color: #202124; color: #e8eaed; font-size: 15px; ' +
+    'border-radius: 12px; padding: 14px 16px; border: 1px solid #3c4043; ' +
+    'box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-height: 1680px;';
+const SOURCE_STYLE = 'color: #9aa0a6; font-size: 11px;';
+const HEADER_BUTTON_STYLE = 'color: #9aa0a6; background-color: transparent; ' +
+    'border-radius: 6px; padding: 3px 10px;';
 
 // Renders the translator UI inside GNOME Shell: a small "Translate" bar at
 // the pointer when text is selected, and a streaming translation panel once
@@ -94,11 +96,14 @@ export default class TranslatorSelectionExtension extends Extension {
         this._destroyPanel();
 
         this._bar = new St.Button({
-            label: 'Translate',
             style: BAR_STYLE,
             reactive: true,
             can_focus: false,
         });
+        this._bar.set_child(new St.Icon({
+            icon_name: 'accessories-dictionary',
+            icon_size: 18,
+        }));
         Main.layoutManager.uiGroup.add_child(this._bar);
         this._placeNear(this._bar, ...this._pointer);
         this._bar.connect('clicked', () => this._onBarClicked());
@@ -137,7 +142,9 @@ export default class TranslatorSelectionExtension extends Extension {
             style: PANEL_STYLE,
             reactive: true,
         });
-        this._panel.set_width(420);
+        // Narrow column (half the previous width); height tracks content.
+        const monitor = Main.layoutManager.currentMonitor;
+        this._panel.set_width(Math.min(280, Math.round(monitor.width * 0.15)));
 
         const header = new St.BoxLayout({vertical: false});
 
@@ -171,6 +178,16 @@ export default class TranslatorSelectionExtension extends Extension {
         this._translationLabel = new St.Label({text: 'Translating…'});
         this._translationLabel.clutter_text.set_line_wrap(true);
         this._panel.add_child(this._translationLabel);
+
+        const footer = new St.BoxLayout({vertical: false});
+        const settingsButton = new St.Button({label: 'Settings', style: HEADER_BUTTON_STYLE, reactive: true});
+        settingsButton.connect('clicked', () => {
+            Gio.DBus.session.call(
+                DBUS_NAME, DBUS_PATH, DBUS_IFACE, 'ShowSettings',
+                null, null, Gio.DBusCallFlags.NONE, 1000, null, null);
+        });
+        footer.add_child(settingsButton);
+        this._panel.add_child(footer);
 
         Main.layoutManager.uiGroup.add_child(this._panel);
         this._placeNear(this._panel, x, y);

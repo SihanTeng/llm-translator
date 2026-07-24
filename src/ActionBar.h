@@ -21,7 +21,6 @@ public:
 
 signals:
     void translateRequested();
-    void settingsRequested();
     void dismissed();
 
 protected:

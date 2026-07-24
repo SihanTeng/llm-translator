@@ -9,9 +9,14 @@
 #include <QCursor>
 #include <QDBusConnection>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMenu>
 #include <QPixmap>
+#include <QRegularExpression>
 #include <QSystemTrayIcon>
+#include <QTextDocument>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 
@@ -30,29 +35,43 @@ AppController::AppController(QObject *parent)
             m_actionBar, &QWidget::hide);
     connect(m_actionBar, &ActionBar::translateRequested,
             this, &AppController::startPendingTranslation);
-    connect(m_actionBar, &ActionBar::settingsRequested,
+    connect(m_popup, &PopupWindow::settingsRequested,
             this, &AppController::openSettings);
     // Allow re-selecting the same text after the bar was dismissed.
     connect(m_actionBar, &ActionBar::dismissed,
             m_monitor, &SelectionMonitor::resetLastEmitted);
-    connect(m_client, &DeepSeekClient::tokenReceived,
-            m_popup, &PopupWindow::appendToken);
-    connect(m_client, &DeepSeekClient::errorOccurred,
-            m_popup, &PopupWindow::showError);
+
+    // Word mode (single word -> structured dictionary explanation) is not
+    // streamed to the UI; the raw JSON is buffered and formatted at the end.
+    connect(m_client, &DeepSeekClient::tokenReceived, this, [this](const QString &delta) {
+        if (m_wordMode) {
+            m_wordBuffer += delta;
+            return;
+        }
+        m_popup->appendToken(delta);
+        emit TranslationToken(delta);
+    });
+    connect(m_client, &DeepSeekClient::requestFinished, this, [this] {
+        if (m_wordMode) {
+            const QString html = formatWordResult(m_wordBuffer);
+            m_popup->setResult(html);
+            // The Shell extension's St.Label cannot render HTML.
+            QTextDocument doc;
+            doc.setHtml(html);
+            emit TranslationToken(doc.toPlainText().trimmed());
+        }
+        emit TranslationFinished();
+    });
+    connect(m_client, &DeepSeekClient::errorOccurred, this, [this](const QString &message) {
+        m_popup->showError(message);
+        emit TranslationError(message);
+    });
 
     // D-Bus entry point for the GNOME Shell extension (Wayland sessions).
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.registerService(QStringLiteral("org.translator.App"));
     bus.registerObject(QStringLiteral("/org/translator/App"), this,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
-
-    // Forward the translation stream to D-Bus for the extension's panel.
-    connect(m_client, &DeepSeekClient::tokenReceived,
-            this, &AppController::TranslationToken);
-    connect(m_client, &DeepSeekClient::requestFinished,
-            this, &AppController::TranslationFinished);
-    connect(m_client, &DeepSeekClient::errorOccurred,
-            this, &AppController::TranslationError);
 
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         auto *menu = new QMenu;
@@ -86,9 +105,8 @@ void AppController::TranslateSelection(const QString &text, int x, int y)
         return;
     if (m_shellUiEnabled) {
         // The extension renders the bar and the translation panel itself;
-        // just run the request. The stream reaches it via TranslationToken.
-        m_client->cancel();
-        m_client->translate(text, buildSystemPrompt());
+        // just run the request. The result reaches it via TranslationToken.
+        startTranslation(text, QPoint(x, y), false);
         return;
     }
     offerTranslation(text, QPoint(x, y));
@@ -97,6 +115,13 @@ void AppController::TranslateSelection(const QString &text, int x, int y)
 void AppController::SetShellUiEnabled(bool enabled)
 {
     m_shellUiEnabled = enabled;
+}
+
+void AppController::ShowSettings()
+{
+    // openSettings() runs a modal dialog; defer it so the D-Bus method
+    // returns immediately instead of blocking the caller until it closes.
+    QTimer::singleShot(0, this, &AppController::openSettings);
 }
 
 void AppController::onSelection(const QString &text)
@@ -117,9 +142,24 @@ void AppController::startPendingTranslation()
 {
     if (m_pendingText.isEmpty())
         return;
+    startTranslation(m_pendingText, m_pendingPos, true);
+}
+
+void AppController::startTranslation(const QString &text, const QPoint &globalPos, bool showPopup)
+{
     m_client->cancel();
-    m_popup->startTranslation(m_pendingText, m_pendingPos);
-    m_client->translate(m_pendingText, buildSystemPrompt());
+    m_wordMode = isSingleWord(text);
+    m_wordBuffer.clear();
+    if (showPopup)
+        m_popup->startTranslation(text, globalPos);
+    m_client->translate(text, buildSystemPrompt(m_wordMode), m_wordMode);
+}
+
+bool AppController::isSingleWord(const QString &text)
+{
+    static const QRegularExpression whitespace(QStringLiteral("\\s"));
+    const QString trimmed = text.trimmed();
+    return !trimmed.isEmpty() && trimmed.size() < 40 && !trimmed.contains(whitespace);
 }
 
 void AppController::openSettings()
@@ -140,8 +180,21 @@ void AppController::applySettings(const AppSettings &settings)
     m_monitor->setEnabled(m_settings.monitorEnabled);
 }
 
-QString AppController::buildSystemPrompt() const
+QString AppController::buildSystemPrompt(bool wordMode) const
 {
+    if (wordMode) {
+        // Monolingual learner's dictionary: explain the word in its own
+        // language using simpler terms. (Sentences, by contrast, are
+        // translated into the user's mother tongue per the target setting.)
+        return tr("You are a monolingual learner's dictionary. For the single word the user "
+                  "provides, respond ONLY with a JSON object (no markdown, no extra text) with "
+                  "these string fields: \"word\", \"phonetic\" (IPA for English, pinyin for "
+                  "Chinese, may be empty), \"pos\" (part of speech, e.g. \"n.\"), \"meaning\" "
+                  "(a concise definition in the SAME language as the word, using simpler "
+                  "terms), \"explanation\" (1-2 sentences in the SAME language as the word, "
+                  "using simple everyday words, about usage), \"example\" (one short example "
+                  "sentence in the SAME language as the word).");
+    }
     if (m_settings.targetLanguage == "zh"_L1)
         return tr("You are a translation engine. Translate the user's text into Simplified Chinese. "
                   "Output only the translation: no explanations, no quotes, no markup.");
@@ -151,4 +204,38 @@ QString AppController::buildSystemPrompt() const
     return tr("You are a translation engine. If the user's text is Chinese, translate it into "
               "English; otherwise translate it into Simplified Chinese. "
               "Output only the translation: no explanations, no quotes, no markup.");
+}
+
+QString AppController::formatWordResult(const QString &jsonPayload) const
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(jsonPayload.toUtf8());
+    if (!doc.isObject())
+        return jsonPayload.toHtmlEscaped(); // model did not produce valid JSON
+
+    const QJsonObject obj = doc.object();
+    const auto field = [&obj](const char *key) {
+        return obj[QLatin1StringView(key)].toString().toHtmlEscaped();
+    };
+
+    QString html = "<div style='margin-bottom:6px'>"
+                   "<span style='font-size:17px; font-weight:bold; color:#4a90ff'>"
+                   + field("word") + "</span>";
+    const QString phonetic = field("phonetic");
+    if (!phonetic.isEmpty())
+        html += "  <span style='color:#9aa0a6'>" + phonetic + "</span>";
+    const QString pos = field("pos");
+    if (!pos.isEmpty())
+        html += "  <span style='color:#9aa0a6; font-style:italic'>" + pos + "</span>";
+    html += "</div>";
+
+    const QString meaning = field("meaning");
+    if (!meaning.isEmpty())
+        html += "<div style='font-weight:600; margin-bottom:6px'>" + meaning + "</div>";
+    const QString explanation = field("explanation");
+    if (!explanation.isEmpty())
+        html += "<div style='margin-bottom:6px'>" + explanation + "</div>";
+    const QString example = field("example");
+    if (!example.isEmpty())
+        html += "<div style='color:#9aa0a6; font-style:italic'>" + example + "</div>";
+    return html;
 }

@@ -33,27 +33,25 @@ ActionBar::ActionBar(QWidget *parent)
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAttribute(Qt::WA_X11DoNotAcceptFocus);
 
-    m_button->setText(tr("Translate"));
+    const QIcon translateIcon = QIcon::fromTheme(
+        QStringLiteral("accessories-dictionary"),
+        QIcon::fromTheme(QStringLiteral("preferences-desktop-locale")));
+    if (translateIcon.isNull())
+        m_button->setText(tr("Translate"));
+    else {
+        m_button->setIcon(translateIcon);
+        m_button->setIconSize(QSize(18, 18));
+    }
+    m_button->setToolTip(tr("Translate"));
     m_button->setCursor(Qt::PointingHandCursor);
     m_button->setStyleSheet(
         "QToolButton { color: white; background: #2d7dff; border-radius: 4px; "
         "padding: 4px 12px; font-weight: bold; }"
         "QToolButton:hover { background: #4a90ff; }"_L1);
 
-    auto *settingsButton = new QToolButton(this);
-    const QIcon settingsIcon = QIcon::fromTheme(QStringLiteral("preferences-system"));
-    if (settingsIcon.isNull())
-        settingsButton->setText(QStringLiteral("⚙"));
-    else
-        settingsButton->setIcon(settingsIcon);
-    settingsButton->setToolTip(tr("Settings"));
-    settingsButton->setCursor(Qt::PointingHandCursor);
-    settingsButton->setAutoRaise(true);
-
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->addWidget(m_button);
-    layout->addWidget(settingsButton);
 
     setStyleSheet("ActionBar { background: palette(window); border: 1px solid palette(mid); "
                   "border-radius: 6px; }"_L1);
@@ -65,10 +63,6 @@ ActionBar::ActionBar(QWidget *parent)
     connect(m_button, &QToolButton::clicked, this, [this] {
         hide();
         emit translateRequested();
-    });
-    connect(settingsButton, &QToolButton::clicked, this, [this] {
-        hide();
-        emit settingsRequested();
     });
 }
 

@@ -38,6 +38,9 @@ public slots:
     // consumes the Translation* signals below instead.
     void SetShellUiEnabled(bool enabled);
 
+    // Called by the GNOME Shell extension's panel Settings button.
+    void ShowSettings();
+
 signals:
     // Forwarded to the D-Bus session bus (ExportAllSignals) for the GNOME
     // Shell extension's translation panel.
@@ -49,9 +52,12 @@ private:
     void onSelection(const QString &text);
     void offerTranslation(const QString &text, const QPoint &globalPos);
     void startPendingTranslation();
+    void startTranslation(const QString &text, const QPoint &globalPos, bool showPopup);
     void openSettings();
     void applySettings(const AppSettings &settings);
-    [[nodiscard]] QString buildSystemPrompt() const;
+    [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
+    [[nodiscard]] QString formatWordResult(const QString &jsonPayload) const;
+    static bool isSingleWord(const QString &text);
 
     SelectionMonitor *m_monitor;
     DeepSeekClient *m_client;
@@ -62,4 +68,6 @@ private:
     QString m_pendingText;
     QPoint m_pendingPos;
     bool m_shellUiEnabled = false;
+    bool m_wordMode = false;
+    QString m_wordBuffer;
 };

@@ -18,7 +18,13 @@ public:
 
     void startTranslation(const QString &sourceText, const QPoint &globalPos);
     void appendToken(const QString &delta);
+    // Renders an HTML result (used for the structured dictionary card) and
+    // keeps its plain-text form for the Copy button.
+    void setResult(const QString &html);
     void showError(const QString &message);
+
+signals:
+    void settingsRequested();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -27,6 +33,7 @@ protected:
 
 private:
     void placeNear(const QPoint &globalPos);
+    void ensureOnScreen();
 
     QLabel *m_sourceLabel;
     QTextBrowser *m_resultView;

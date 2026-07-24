@@ -82,11 +82,18 @@ workaround, XWayland selections are still visible via the X11 path).
 1. On first run the Settings dialog opens — paste your DeepSeek API key.
    Alternatively set `DEEPSEEK_API_KEY` in the environment (it overrides the
    stored key and is never written to disk).
-2. Select text with the mouse — a small **Translate** action bar appears near
+2. Select text with the mouse — a small **Translate** icon bar appears near
    the pointer. No API call is made yet.
-3. Click **Translate**; the translation streams into the popup. Dismiss the
+3. Click the bar; the translation streams into the popup. Dismiss the
    bar instead by clicking anywhere else, pressing `Esc`, or waiting a few
    seconds.
+   - Selecting a **single word** triggers dictionary mode instead: the app
+     requests a structured JSON response (`response_format: json_object`)
+     and shows a parsed card — word, phonetic, part of speech, meaning,
+     explanation, and an example sentence. Explanations are monolingual:
+     the word is explained in its own language using simpler terms
+     (learner's-dictionary style), while sentences are translated into
+     your configured target language.
 4. `Esc` or clicking anywhere else dismisses the popup; `Copy` copies the
    translation.
 5. The tray icon (where a tray is available) opens Settings, pauses

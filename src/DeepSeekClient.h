@@ -22,7 +22,9 @@ public:
     void setModel(const QString &model) { m_model = model; }
 
     // Starts a streaming request, cancelling any in-flight one.
-    void translate(const QString &text, const QString &systemPrompt);
+    // jsonMode: requests a structured JSON object response (non-streamed,
+    // single completion) — used for dictionary-style word explanations.
+    void translate(const QString &text, const QString &systemPrompt, bool jsonMode = false);
     void cancel();
 
 signals:
@@ -40,4 +42,5 @@ private:
     QString m_baseUrl = QStringLiteral("https://api.deepseek.com");
     QString m_model = QStringLiteral("deepseek-v4-flash");
     QByteArray m_buffer;
+    bool m_jsonMode = false;
 };
