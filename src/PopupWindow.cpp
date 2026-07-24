@@ -28,22 +28,37 @@ PopupWindow::PopupWindow(QWidget *parent)
     // generous fraction of the available geometry, height tracks content.
 
     m_sourceLabel->setWordWrap(true);
-    m_sourceLabel->setStyleSheet("color: #9aa0a6; font-size: 11px;"_L1);
+    m_sourceLabel->setWordWrap(true);
+    m_sourceLabel->setStyleSheet("color: palette(mid); font-size: 11px;"_L1);
 
     m_resultView->setFrameShape(QFrame::NoFrame);
     m_resultView->setOpenExternalLinks(false);
     m_resultView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_resultView->setSizeAdjustPolicy(QTextBrowser::AdjustToContents);
     m_resultView->setStyleSheet(
-        "QTextBrowser { background: transparent; color: #e8eaed; font-size: 15px; }"_L1);
+        "QTextBrowser { background: transparent; color: palette(text); font-size: 14px; }"_L1);
 
-    m_copyButton->setText(tr("Copy"));
+    const QIcon copyIcon = QIcon::fromTheme(QStringLiteral("edit-copy"));
+    if (copyIcon.isNull())
+        m_copyButton->setText(tr("Copy"));
+    else
+        m_copyButton->setIcon(copyIcon);
+    m_copyButton->setToolTip(tr("Copy"));
     m_copyButton->setAutoRaise(true);
-    m_closeButton->setText(QStringLiteral("×"));
+    m_copyButton->setFixedSize(28, 28);
+    m_copyButton->setIconSize(QSize(16, 16));
+    const QIcon closeIcon = QIcon::fromTheme(QStringLiteral("window-close"));
+    if (closeIcon.isNull())
+        m_closeButton->setText(QStringLiteral("×"));
+    else
+        m_closeButton->setIcon(closeIcon);
+    m_closeButton->setToolTip(tr("Close"));
     m_closeButton->setAutoRaise(true);
+    m_closeButton->setFixedSize(28, 28);
+    m_closeButton->setIconSize(QSize(16, 16));
     const QString headerButtonStyle =
-        "QToolButton { color: #9aa0a6; padding: 2px 8px; border-radius: 4px; }"
-        "QToolButton:hover { color: #e8eaed; background: #3c4043; }"_L1;
+        "QToolButton { color: palette(mid); padding: 2px 8px; border-radius: 4px; }"
+        "QToolButton:hover { color: palette(text); background: palette(midlight); }"_L1;
     m_copyButton->setStyleSheet(headerButtonStyle);
     m_closeButton->setStyleSheet(headerButtonStyle);
 
@@ -68,20 +83,30 @@ PopupWindow::PopupWindow(QWidget *parent)
     footer->addStretch(1);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(14, 8, 14, 12);
-    layout->setSpacing(6);
+    layout->setContentsMargins(12, 8, 12, 10);
+    layout->setSpacing(5);
     layout->addLayout(header);
     layout->addWidget(m_sourceLabel);
     layout->addWidget(m_resultView, 1);
     layout->addLayout(footer);
 
-    setStyleSheet("PopupWindow { background: #202124; border: 1px solid #3c4043; "
-                  "border-radius: 10px; }"_L1);
+    // System-native chrome: follow the desktop palette (Adwaita light/dark)
+    // instead of a hardcoded theme.
+    setStyleSheet("PopupWindow { background: palette(base); border: 1px solid palette(mid); "
+                  "border-radius: 8px; }"_L1);
 
     connect(m_copyButton, &QToolButton::clicked, this, [this] {
         QGuiApplication::clipboard()->setText(m_result, QClipboard::Clipboard);
-        m_copyButton->setText(tr("Copied"));
-        QTimer::singleShot(1200, this, [this] { m_copyButton->setText(tr("Copy")); });
+        const QIcon okIcon = QIcon::fromTheme(QStringLiteral("object-select"),
+                                              QIcon::fromTheme(QStringLiteral("emblem-ok")));
+        if (!okIcon.isNull() && !m_copyButton->icon().isNull()) {
+            const QIcon original = m_copyButton->icon();
+            m_copyButton->setIcon(okIcon);
+            QTimer::singleShot(1200, this, [this, original] { m_copyButton->setIcon(original); });
+        } else {
+            m_copyButton->setText(tr("Copied"));
+            QTimer::singleShot(1200, this, [this] { m_copyButton->setText(tr("Copy")); });
+        }
     });
     connect(m_closeButton, &QToolButton::clicked, this, &QWidget::hide);
     connect(settingsButton, &QToolButton::clicked, this, &PopupWindow::settingsRequested);

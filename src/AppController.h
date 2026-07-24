@@ -52,6 +52,9 @@ signals:
     void TranslationToken(const QString &delta);
     void TranslationFinished();
     void TranslationError(const QString &message);
+    // Raw JSON payload of a dictionary-mode word explanation, so the Shell
+    // extension can render its own structured card.
+    void TranslationWordCard(const QString &jsonPayload);
 
 private:
     void onSelection(const QString &text);

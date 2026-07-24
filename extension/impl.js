@@ -15,14 +15,18 @@ const MIN_LENGTH = 2;
 const MAX_LENGTH = 4000;
 const AUTO_HIDE_SECONDS = 8;
 
-const BAR_STYLE = 'background-color: #2d7dff; color: white; border-radius: 10px; ' +
-    'padding: 8px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);';
-const PANEL_STYLE = 'background-color: #202124; color: #e8eaed; font-size: 15px; ' +
-    'border-radius: 12px; padding: 14px 16px; border: 1px solid #3c4043; ' +
-    'box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-height: 1680px;';
-const SOURCE_STYLE = 'color: #9aa0a6; font-size: 11px;';
-const HEADER_BUTTON_STYLE = 'color: #9aa0a6; background-color: transparent; ' +
+const BAR_STYLE = 'background-color: #3584e4; color: white; border-radius: 10px; ' +
+    'padding: 8px 10px;';
+const PANEL_STYLE = 'background-color: rgba(36,38,40,0.98); color: #ececec; font-size: 14px; ' +
+    'border-radius: 10px; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.08); ' +
+    'box-shadow: 0 2px 8px rgba(0,0,0,0.35); max-height: 1680px;';
+const SOURCE_STYLE = 'color: #9a9a9a; font-size: 11px;';
+const MUTED_STYLE = 'color: #9a9a9a;';
+const HEADER_BUTTON_STYLE = 'color: #9a9a9a; background-color: transparent; ' +
     'border-radius: 6px; padding: 3px 10px;';
+const ICON_BUTTON_STYLE = 'color: #9a9a9a; background-color: transparent; ' +
+    'border-radius: 6px; padding: 6px;';
+const ICON_SIZE = 16;
 
 // The real extension implementation. Loaded and hot-reloaded by the stable
 // loader in extension.js — edit this file freely, no Shell restart needed.
@@ -177,14 +181,14 @@ export class TranslatorImpl {
         const monitor = Main.layoutManager.currentMonitor;
         this._panel.set_width(Math.min(280, Math.round(monitor.width * 0.15)));
 
-        const header = new St.BoxLayout({vertical: false});
+        const header = new St.BoxLayout({vertical: false, style: 'margin-bottom: 6px;'});
 
-        const copyButton = new St.Button({label: 'Copy', style: HEADER_BUTTON_STYLE, reactive: true});
+        const copyButton = this._iconButton('edit-copy-symbolic');
         copyButton.connect('clicked', () => {
             St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._translation);
-            copyButton.set_label('Copied');
+            copyButton.set_child(new St.Icon({icon_name: 'object-select-symbolic', icon_size: ICON_SIZE}));
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1200, () => {
-                copyButton.set_label('Copy');
+                copyButton.set_child(new St.Icon({icon_name: 'edit-copy-symbolic', icon_size: ICON_SIZE}));
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -193,7 +197,7 @@ export class TranslatorImpl {
         const spacer = new St.Widget({x_expand: true});
         header.add_child(spacer);
 
-        const closeButton = new St.Button({label: '×', style: HEADER_BUTTON_STYLE, reactive: true});
+        const closeButton = this._iconButton('window-close-symbolic');
         closeButton.connect('clicked', () => this._destroyPanel());
         header.add_child(closeButton);
 
@@ -202,7 +206,7 @@ export class TranslatorImpl {
         let source = sourceText.replace(/\s+/g, ' ');
         if (source.length > 140)
             source = `${source.slice(0, 140)}…`;
-        const sourceLabel = new St.Label({text: source, style: SOURCE_STYLE});
+        const sourceLabel = new St.Label({text: source, style: `${SOURCE_STYLE} margin-bottom: 6px;`});
         sourceLabel.clutter_text.set_line_wrap(true);
         this._panel.add_child(sourceLabel);
 
@@ -219,6 +223,7 @@ export class TranslatorImpl {
         });
         footer.add_child(settingsButton);
         this._panel.add_child(footer);
+        this._footer = footer;
 
         Main.layoutManager.uiGroup.add_child(this._panel);
         this._placeNear(this._panel, x, y);
@@ -235,11 +240,67 @@ export class TranslatorImpl {
             this._translationLabel.set_text(this._translation);
         } else if (signal === 'TranslationError') {
             this._translationLabel.set_text(payload);
+        } else if (signal === 'TranslationWordCard') {
+            this._renderWordCard(payload);
         }
         // TranslationFinished: nothing to do, tokens are all shown.
     }
 
+    // Renders the dictionary-mode JSON payload as a structured card with
+    // real typography (St widgets cannot render the Qt popup's HTML).
+    _renderWordCard(payload) {
+        let card;
+        try {
+            card = JSON.parse(payload);
+        } catch (_e) {
+            return; // keep the streamed plain-text fallback
+        }
+        if (!this._panel || !this._translationLabel)
+            return;
+
+        this._translationLabel.hide();
+
+        const box = new St.BoxLayout({vertical: true});
+
+        // word + phonetic + pos on one baseline
+        const header = new St.BoxLayout({vertical: false, style: 'margin-bottom: 4px;'});
+        header.add_child(new St.Label({
+            text: card.word ?? '',
+            style: 'font-weight: bold; font-size: 20px;',
+        }));
+        const meta = [card.phonetic, card.pos]
+            .filter(s => s && s.length > 0).join('  ');
+        if (meta) {
+            const metaLabel = new St.Label({
+                text: meta,
+                style: `${MUTED_STYLE} margin-left: 8px; font-size: 13px;`,
+                y_align: Clutter.ActorAlign.END,
+            });
+            header.add_child(metaLabel);
+        }
+        box.add_child(header);
+
+        const addRow = (text, style) => {
+            if (!text)
+                return;
+            const label = new St.Label({text, style});
+            label.clutter_text.set_line_wrap(true);
+            box.add_child(label);
+        };
+        addRow(card.meaning, 'font-weight: 600; margin-top: 8px;');
+        addRow(card.explanation, 'margin-top: 8px;');
+        addRow(card.example, `${MUTED_STYLE} margin-top: 8px;`);
+
+        this._panel.insert_child_below(box, this._footer);
+    }
+
     // ---- helpers ----------------------------------------------------------
+
+    _iconButton(iconName) {
+        const button = new St.Button({style: ICON_BUTTON_STYLE, reactive: true});
+        button.set_child(new St.Icon({icon_name: iconName, icon_size: ICON_SIZE}));
+        return button;
+    }
 
     _isSingleWord(text) {
         return !/\s/.test(text) && text.length < 40;

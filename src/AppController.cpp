@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
+#include <QPalette>
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QSystemTrayIcon>
@@ -55,7 +56,10 @@ AppController::AppController(QObject *parent)
         if (m_wordMode) {
             const QString html = formatWordResult(m_wordBuffer);
             m_popup->setResult(html);
-            // The Shell extension's St.Label cannot render HTML.
+            // The Shell extension renders its own structured card from the
+            // raw JSON (St widgets cannot render HTML).
+            emit TranslationWordCard(m_wordBuffer);
+            // Plain-text form for older extension versions.
             QTextDocument doc;
             doc.setHtml(html);
             emit TranslationToken(doc.toPlainText().trimmed());
@@ -232,30 +236,36 @@ QString AppController::formatWordResult(const QString &jsonPayload) const
     if (!doc.isObject())
         return jsonPayload.toHtmlEscaped(); // model did not produce valid JSON
 
+    // Palette-driven, so the card follows the system theme (Adwaita
+    // light/dark) instead of hardcoded colors.
+    const QPalette palette = qApp->palette();
+    const QString accent = palette.color(QPalette::Link).name();
+    const QString muted = palette.color(QPalette::PlaceholderText).name();
+
     const QJsonObject obj = doc.object();
     const auto field = [&obj](const char *key) {
         return obj[QLatin1StringView(key)].toString().toHtmlEscaped();
     };
 
     QString html = "<div style='margin-bottom:6px'>"
-                   "<span style='font-size:17px; font-weight:bold; color:#4a90ff'>"
+                   "<span style='font-size:18px; font-weight:bold; color:" + accent + "'>"
                    + field("word") + "</span>";
     const QString phonetic = field("phonetic");
     if (!phonetic.isEmpty())
-        html += "  <span style='color:#9aa0a6'>" + phonetic + "</span>";
+        html += "  <span style='color:" + muted + "'>" + phonetic + "</span>";
     const QString pos = field("pos");
     if (!pos.isEmpty())
-        html += "  <span style='color:#9aa0a6; font-style:italic'>" + pos + "</span>";
+        html += "  <span style='color:" + muted + "'>" + pos + "</span>";
     html += "</div>";
 
     const QString meaning = field("meaning");
     if (!meaning.isEmpty())
-        html += "<div style='font-weight:600; margin-bottom:6px'>" + meaning + "</div>";
+        html += "<div style='font-weight:600; margin-top:8px; margin-bottom:8px'>" + meaning + "</div>";
     const QString explanation = field("explanation");
     if (!explanation.isEmpty())
-        html += "<div style='margin-bottom:6px'>" + explanation + "</div>";
+        html += "<div style='margin-bottom:8px'>" + explanation + "</div>";
     const QString example = field("example");
     if (!example.isEmpty())
-        html += "<div style='color:#9aa0a6; font-style:italic'>" + example + "</div>";
+        html += "<div style='color:" + muted + "'>" + example + "</div>";
     return html;
 }
