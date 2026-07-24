@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Dev loop for the translator app: watches src/ and CMakeLists.txt, rebuilds
-# on change, and restarts the app when the build succeeds. True hot reload
-# is not possible for a compiled C++/Qt Widgets app; this is the practical
-# equivalent (restart takes well under a second after a successful build).
+# Dev loop for the translator app:
+#  - src/ or CMakeLists.txt changes  -> rebuild with Ninja, restart the app
+#  - extension/ changes              -> sync to the installed GNOME Shell
+#    extension dir; the loader there re-imports impl.js live (no relogin)
 #
 # Usage: ./dev.sh        (Ctrl+C to stop)
 # Logs:  /tmp/translator_dev.log (app), /tmp/translator_build.log (build)
@@ -12,6 +12,7 @@ set -u
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 CMAKE="$HOME/Qt/Tools/CMake/bin/cmake"
 BUILD_DIR="$ROOT/build"
+EXT_DIR="$HOME/.local/share/gnome-shell/extensions/translator@translator"
 
 restart() {
     pkill -x translator 2>/dev/null
@@ -20,21 +21,37 @@ restart() {
     echo "[dev] app restarted (log: /tmp/translator_dev.log)"
 }
 
+sync_extension() {
+    if [ -d "$EXT_DIR" ]; then
+        cp "$ROOT/extension/extension.js" "$ROOT/extension/impl.js" \
+           "$ROOT/extension/metadata.json" "$EXT_DIR/" && \
+            echo "[dev] extension synced (Shell hot-reloads impl.js)"
+    fi
+}
+
 echo "[dev] initial build"
 if "$CMAKE" --build "$BUILD_DIR" > /tmp/translator_build.log 2>&1; then
     restart
 else
     echo "[dev] build FAILED (see /tmp/translator_build.log)"
 fi
+sync_extension
 
-echo "[dev] watching $ROOT/src — edit and save to rebuild+restart"
-while inotifywait -q -r -e modify,create,delete,move \
-        "$ROOT/src" "$ROOT/CMakeLists.txt" > /dev/null 2>&1; do
+echo "[dev] watching src/ and extension/ — edit and save to reload"
+while read -r dir _events _file; do
     sleep 0.5  # debounce: let the editor finish writing
-    if "$CMAKE" --build "$BUILD_DIR" > /tmp/translator_build.log 2>&1; then
-        echo "[dev] build ok"
-        restart
-    else
-        echo "[dev] build FAILED (see /tmp/translator_build.log)"
-    fi
-done
+    case "$dir" in
+        *extension*)
+            sync_extension
+            ;;
+        *)
+            if "$CMAKE" --build "$BUILD_DIR" > /tmp/translator_build.log 2>&1; then
+                echo "[dev] build ok"
+                restart
+            else
+                echo "[dev] build FAILED (see /tmp/translator_build.log)"
+            fi
+            ;;
+    esac
+done < <(inotifywait -m -r -e modify,create,delete,move \
+        --format '%w %e %f' "$ROOT/src" "$ROOT/extension" "$ROOT/CMakeLists.txt" 2>/dev/null)

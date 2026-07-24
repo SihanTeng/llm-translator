@@ -101,15 +101,21 @@ AppController::AppController(QObject *parent)
 
 void AppController::TranslateSelection(const QString &text, int x, int y)
 {
+    TranslateSelectionWithContext(text, QString(), x, y);
+}
+
+void AppController::TranslateSelectionWithContext(const QString &text, const QString &context,
+                                                  int x, int y)
+{
     if (!m_settings.monitorEnabled)
         return;
     if (m_shellUiEnabled) {
         // The extension renders the bar and the translation panel itself;
         // just run the request. The result reaches it via TranslationToken.
-        startTranslation(text, QPoint(x, y), false);
+        startTranslation(text, context, QPoint(x, y), false);
         return;
     }
-    offerTranslation(text, QPoint(x, y));
+    offerTranslation(text, context, QPoint(x, y));
 }
 
 void AppController::SetShellUiEnabled(bool enabled)
@@ -126,14 +132,16 @@ void AppController::ShowSettings()
 
 void AppController::onSelection(const QString &text)
 {
-    offerTranslation(text, QCursor::pos());
+    offerTranslation(text, QString(), QCursor::pos());
 }
 
-void AppController::offerTranslation(const QString &text, const QPoint &globalPos)
+void AppController::offerTranslation(const QString &text, const QString &context,
+                                     const QPoint &globalPos)
 {
     m_client->cancel();
     m_popup->hide();
     m_pendingText = text;
+    m_pendingContext = context;
     m_pendingPos = globalPos;
     m_actionBar->offer(globalPos);
 }
@@ -142,17 +150,25 @@ void AppController::startPendingTranslation()
 {
     if (m_pendingText.isEmpty())
         return;
-    startTranslation(m_pendingText, m_pendingPos, true);
+    startTranslation(m_pendingText, m_pendingContext, m_pendingPos, true);
 }
 
-void AppController::startTranslation(const QString &text, const QPoint &globalPos, bool showPopup)
+void AppController::startTranslation(const QString &text, const QString &context,
+                                     const QPoint &globalPos, bool showPopup)
 {
     m_client->cancel();
     m_wordMode = isSingleWord(text);
     m_wordBuffer.clear();
     if (showPopup)
         m_popup->startTranslation(text, globalPos);
-    m_client->translate(text, buildSystemPrompt(m_wordMode), m_wordMode);
+
+    // In word mode, a captured sentence lets the model explain the word as
+    // used in that sentence.
+    QString userContent = text;
+    if (m_wordMode && !context.isEmpty())
+        userContent = "Word: "_L1 + text + "\nSentence: "_L1 + context;
+
+    m_client->translate(userContent, buildSystemPrompt(m_wordMode), m_wordMode);
 }
 
 bool AppController::isSingleWord(const QString &text)
@@ -184,8 +200,10 @@ QString AppController::buildSystemPrompt(bool wordMode) const
 {
     if (wordMode) {
         // Monolingual learner's dictionary: explain the word in its own
-        // language using simpler terms. (Sentences, by contrast, are
-        // translated into the user's mother tongue per the target setting.)
+        // language using simpler terms. When the user message includes a
+        // "Sentence:" line, explain the word AS USED IN THAT SENTENCE.
+        // (Sentences, by contrast, are translated into the user's mother
+        // tongue per the target setting.)
         return tr("You are a monolingual learner's dictionary. For the single word the user "
                   "provides, respond ONLY with a JSON object (no markdown, no extra text) with "
                   "these string fields: \"word\", \"phonetic\" (IPA for English, pinyin for "
@@ -193,7 +211,9 @@ QString AppController::buildSystemPrompt(bool wordMode) const
                   "(a concise definition in the SAME language as the word, using simpler "
                   "terms), \"explanation\" (1-2 sentences in the SAME language as the word, "
                   "using simple everyday words, about usage), \"example\" (one short example "
-                  "sentence in the SAME language as the word).");
+                  "sentence in the SAME language as the word). If the user message includes "
+                  "a \"Sentence:\" line, the word appears in that sentence: give the meaning "
+                  "the word has IN THAT SENTENCE and base the explanation on that usage.");
     }
     if (m_settings.targetLanguage == "zh"_L1)
         return tr("You are a translation engine. Translate the user's text into Simplified Chinese. "

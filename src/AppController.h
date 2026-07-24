@@ -31,6 +31,11 @@ public slots:
     // selection time; only honored on X11 (Wayland compositors place windows).
     void TranslateSelection(const QString &text, int x, int y);
 
+    // Same as TranslateSelection, plus the sentence the word was found in
+    // (for contextual dictionary explanations). Kept separate so older
+    // extension versions calling the 3-arg form keep working.
+    void TranslateSelectionWithContext(const QString &text, const QString &context, int x, int y);
+
     // Called by the GNOME Shell extension when it loads/unloads. When
     // enabled, the app renders no Qt UI for D-Bus-triggered translations;
     // the extension renders the action bar and translation panel itself
@@ -50,9 +55,9 @@ signals:
 
 private:
     void onSelection(const QString &text);
-    void offerTranslation(const QString &text, const QPoint &globalPos);
+    void offerTranslation(const QString &text, const QString &context, const QPoint &globalPos);
     void startPendingTranslation();
-    void startTranslation(const QString &text, const QPoint &globalPos, bool showPopup);
+    void startTranslation(const QString &text, const QString &context, const QPoint &globalPos, bool showPopup);
     void openSettings();
     void applySettings(const AppSettings &settings);
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
@@ -66,6 +71,7 @@ private:
     QSystemTrayIcon *m_tray = nullptr;
     AppSettings m_settings;
     QString m_pendingText;
+    QString m_pendingContext;
     QPoint m_pendingPos;
     bool m_shellUiEnabled = false;
     bool m_wordMode = false;
