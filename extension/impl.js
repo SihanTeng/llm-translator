@@ -160,7 +160,9 @@ export class TranslatorImpl {
 
     _onBarClicked() {
         const text = this._pendingText;
-        const context = this._isSingleWord(text) ? this._getContextSentence(text) : '';
+        // Always try to capture the containing sentence: the model uses it
+        // to explain or translate in context.
+        const context = this._getContextSentence(text);
         const [x, y] = this._pointer;
         this._removeAutoHide();
         this._destroyBar();
@@ -338,10 +340,6 @@ export class TranslatorImpl {
         const button = new St.Button({ style: ICON_BUTTON_STYLE, reactive: true });
         button.set_child(new St.Icon({ icon_name: iconName, icon_size: ICON_SIZE }));
         return button;
-    }
-
-    _isSingleWord(text) {
-        return !/\s/.test(text) && text.length < 40;
     }
 
     // Reads the focused widget's text via AT-SPI and returns the sentence

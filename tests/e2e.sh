@@ -54,17 +54,23 @@ sleep 2
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.SetShellUiEnabled true > /dev/null
 
-# Case 1: phrase translation (streaming)
+# Case 1: long sentence (streams)
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.TranslateSelectionWithContext \
+    "The quick brown fox jumps over the lazy dog once again" "" 100 100 > /dev/null
+sleep 3
+
+# Case 2: short phrase (JSON mode, model decides -> phrase translation)
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.TranslateSelectionWithContext "hello world" "" 100 100 > /dev/null
 sleep 3
 
-# Case 2: single word with context (JSON mode)
+# Case 3: single word with context (JSON mode -> dictionary card)
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.TranslateSelectionWithContext "bank" "We sat on the bank" 100 100 > /dev/null
 sleep 3
 
-# Case 3: bad credentials -> error signal. Rewrite the key and restart so
+# Case 4: bad credentials -> error signal. Rewrite the key and restart so
 # the app reloads settings.
 kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
 sed -i 's/^apiKey=.*/apiKey=wrong-key/' "$TRANSLATOR_SETTINGS_DIR/translator/translator.conf"
@@ -92,26 +98,33 @@ with open(f"{work}/requests.jsonl") as f:
     requests = [json.loads(line) for line in f if line.strip()]
 
 # --- request shapes ---------------------------------------------------------
-phrase = next((r for r in requests if r.get("stream") is True), None)
-if not phrase:
-    failures.append("no streaming phrase request received")
+streamed = next((r for r in requests if r.get("stream") is True), None)
+if not streamed:
+    failures.append("no streaming request received (long sentence)")
 else:
-    if phrase["messages"][-1]["content"] != "hello world":
-        failures.append(f"phrase content wrong: {phrase['messages'][-1]['content']!r}")
-    if phrase.get("thinking", {}).get("type") != "disabled":
-        failures.append("thinking mode not disabled in phrase request")
-    if "response_format" in phrase:
-        failures.append("phrase request must not set response_format")
+    content = streamed["messages"][-1]["content"]
+    if "lazy dog" not in content:
+        failures.append(f"streaming content wrong: {content!r}")
+    if streamed.get("thinking", {}).get("type") != "disabled":
+        failures.append("thinking mode not disabled in streaming request")
+    if "response_format" in streamed:
+        failures.append("streaming request must not set response_format")
 
-word = next((r for r in requests if r.get("stream") is False), None)
-if not word:
-    failures.append("no JSON-mode word request received")
+json_requests = [r for r in requests if r.get("stream") is False]
+if len(json_requests) < 2:
+    failures.append(f"expected >=2 JSON-mode requests (short phrase + word), got {len(json_requests)}")
+for r in json_requests:
+    if r.get("response_format", {}).get("type") != "json_object":
+        failures.append("JSON-mode request missing response_format json_object")
+
+word_req = next((r for r in json_requests if "Word: bank" in r["messages"][-1]["content"]
+                 or "Text: bank" in r["messages"][-1]["content"]), None)
+if not word_req:
+    failures.append("no JSON-mode request for the word 'bank'")
 else:
-    if word.get("response_format", {}).get("type") != "json_object":
-        failures.append("word request missing response_format json_object")
-    content = word["messages"][-1]["content"]
-    if "Word: bank" not in content or "Sentence: We sat on the bank" not in content:
-        failures.append(f"word request lacks Word:/Sentence: context: {content!r}")
+    content = word_req["messages"][-1]["content"]
+    if "Text: bank" not in content or "Sentence: We sat on the bank" not in content:
+        failures.append(f"word request lacks Text:/Sentence: context: {content!r}")
 
 # --- D-Bus signals ----------------------------------------------------------
 with open(f"{work}/signals.log", errors="replace") as f:
@@ -120,8 +133,10 @@ with open(f"{work}/signals.log", errors="replace") as f:
 for member in ("TranslationToken", "TranslationWordCard", "TranslationFinished"):
     if member not in signals:
         failures.append(f"missing signal {member}")
-if "TranslationWordCard" in signals and "the land next to a river" not in signals:
+if "the land next to a river" not in signals:
     failures.append("word card JSON did not reach the bus")
+if "这是一个模拟翻译" not in signals:
+    failures.append("phrase translation (mock) did not reach the bus")
 if "TranslationError" not in signals:
     failures.append("expected TranslationError for the bad-key case")
 if "unauthorized" not in signals and "401" not in signals:
@@ -132,5 +147,5 @@ if failures:
     for failure in failures:
         print(" -", failure)
     sys.exit(1)
-print("e2e: all cases pass (phrase stream, word JSON+context, 401 error path)")
+print("e2e: all cases pass (long stream, short phrase JSON, word card+context, 401 path)")
 EOF

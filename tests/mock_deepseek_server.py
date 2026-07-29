@@ -22,6 +22,7 @@ EXPECT_KEY = os.environ.get("MOCK_EXPECT_KEY", "test-key")
 
 TOKENS = ["Hello", ",", " this", " is", " a", " streamed", " translation", "."]
 WORD_CARD = {
+    "type": "word",
     "word": "bank",
     "phonetic": "/bæŋk/",
     "pos": "n.",
@@ -29,6 +30,13 @@ WORD_CARD = {
     "explanation": "Bank here means the side of a river.",
     "example": "We sat on the bank.",
 }
+PHRASE_REPLY = {"type": "phrase", "translation": "这是一个模拟翻译。"}
+
+
+def _selected_text(content: str) -> str:
+    """Extracts the value after 'Text:' (or the whole content)."""
+    first_line = content.split("\n", 1)[0]
+    return first_line.removeprefix("Text:").strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -69,9 +77,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
         else:
+            # JSON mode: word card for single-word texts, phrase reply else.
+            selected = _selected_text(request["messages"][-1]["content"])
+            reply = WORD_CARD if " " not in selected else PHRASE_REPLY
             payload = json.dumps({
                 "choices": [{
-                    "message": {"role": "assistant", "content": json.dumps(WORD_CARD)},
+                    "message": {"role": "assistant", "content": json.dumps(reply)},
                     "finish_reason": "stop",
                 }],
             }).encode()

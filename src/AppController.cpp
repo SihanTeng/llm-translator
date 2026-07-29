@@ -12,6 +12,8 @@
 #include <QDBusConnection>
 #include <QDesktopServices>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPixmap>
@@ -39,27 +41,37 @@ AppController::AppController(QObject *parent)
     // Allow re-selecting the same text after the bar was dismissed.
     connect(m_actionBar, &ActionBar::dismissed, m_monitor, &SelectionMonitor::resetLastEmitted);
 
-    // Word mode (single word -> structured dictionary explanation) is not
-    // streamed to the UI; the raw JSON is buffered and formatted at the end.
+    // Short selections go through JSON mode (the model decides word vs
+    // phrase); the raw JSON is buffered and rendered at the end.
     connect(m_client, &DeepSeekClient::tokenReceived, this, [this](const QString &delta) {
-        if (m_wordMode) {
-            m_wordBuffer += delta;
+        if (m_jsonMode) {
+            m_jsonBuffer += delta;
             return;
         }
         m_popup->appendToken(delta);
         emit TranslationToken(delta);
     });
     connect(m_client, &DeepSeekClient::requestFinished, this, [this] {
-        if (m_wordMode) {
-            const QString html = formatWordCardHtml(m_wordBuffer);
-            m_popup->setResult(html);
-            // The Shell extension renders its own structured card from the
-            // raw JSON (St widgets cannot render HTML).
-            emit TranslationWordCard(m_wordBuffer);
-            // Plain-text form for older extension versions.
-            QTextDocument doc;
-            doc.setHtml(html);
-            emit TranslationToken(doc.toPlainText().trimmed());
+        if (m_jsonMode) {
+            const QJsonObject obj = QJsonDocument::fromJson(m_jsonBuffer.toUtf8()).object();
+            if (obj["type"_L1].toString() == "phrase"_L1
+                && !obj["translation"_L1].toString().isEmpty()) {
+                // The model classified the selection as a phrase: show the
+                // translation as plain text.
+                const QString translation = obj["translation"_L1].toString();
+                m_popup->setResult(translation.toHtmlEscaped());
+                emit TranslationToken(translation);
+            } else {
+                const QString html = formatWordCardHtml(m_jsonBuffer);
+                m_popup->setResult(html);
+                // The Shell extension renders its own structured card from
+                // the raw JSON (St widgets cannot render HTML).
+                emit TranslationWordCard(m_jsonBuffer);
+                // Plain-text form for older extension versions.
+                QTextDocument doc;
+                doc.setHtml(html);
+                emit TranslationToken(doc.toPlainText().trimmed());
+            }
         }
         emit TranslationFinished();
     });
@@ -206,24 +218,31 @@ void AppController::startPendingTranslation() {
 void AppController::startTranslation(
     const QString &text, const QString &context, const QPoint &globalPos, bool showPopup) {
     m_client->cancel();
-    m_wordMode = isSingleWord(text);
-    m_wordBuffer.clear();
+    m_jsonMode = isShortText(text);
+    m_jsonBuffer.clear();
     if (showPopup)
         m_popup->startTranslation(text, globalPos);
 
-    // In word mode, a captured sentence lets the model explain the word as
-    // used in that sentence.
+    // In JSON mode the model classifies the selection itself; a captured
+    // sentence lets it explain/translate in context.
     QString userContent = text;
-    if (m_wordMode && !context.isEmpty())
-        userContent = "Word: "_L1 + text + "\nSentence: "_L1 + context;
+    if (m_jsonMode) {
+        userContent = "Text: "_L1 + text;
+        if (!context.isEmpty())
+            userContent += "\nSentence: "_L1 + context;
+    }
 
-    m_client->translate(userContent, buildSystemPrompt(m_wordMode), m_wordMode);
+    m_client->translate(userContent, buildSystemPrompt(m_jsonMode), m_jsonMode);
 }
 
-bool AppController::isSingleWord(const QString &text) {
-    static const QRegularExpression whitespace(QStringLiteral("\\s"));
+// Short selections are handled in JSON mode, where the model decides whether
+// the text is a word/term (dictionary card) or a phrase (translation).
+bool AppController::isShortText(const QString &text) {
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
     const QString trimmed = text.trimmed();
-    return !trimmed.isEmpty() && trimmed.size() < 40 && !trimmed.contains(whitespace);
+    if (trimmed.isEmpty() || trimmed.size() > 120)
+        return false;
+    return trimmed.split(whitespace, Qt::SkipEmptyParts).size() <= 8;
 }
 
 void AppController::openSettings() {
@@ -242,23 +261,36 @@ void AppController::applySettings(const AppSettings &settings) {
     m_monitor->setEnabled(m_settings.monitorEnabled);
 }
 
-QString AppController::buildSystemPrompt(bool wordMode) const {
-    if (wordMode) {
-        // Monolingual learner's dictionary: explain the word in its own
-        // language using simpler terms. When the user message includes a
-        // "Sentence:" line, explain the word AS USED IN THAT SENTENCE.
-        // (Sentences, by contrast, are translated into the user's mother
-        // tongue per the target setting.)
-        return tr("You are a monolingual learner's dictionary. For the single word the user "
-                  "provides, respond ONLY with a JSON object (no markdown, no extra text) with "
-                  "these string fields: \"word\", \"phonetic\" (IPA for English, pinyin for "
-                  "Chinese, may be empty), \"pos\" (part of speech, e.g. \"n.\"), \"meaning\" "
-                  "(a concise definition in the SAME language as the word, using simpler "
-                  "terms), \"explanation\" (1-2 sentences in the SAME language as the word, "
-                  "using simple everyday words, about usage), \"example\" (one short example "
-                  "sentence in the SAME language as the word). If the user message includes "
-                  "a \"Sentence:\" line, the word appears in that sentence: give the meaning "
-                  "the word has IN THAT SENTENCE and base the explanation on that usage.");
+QString AppController::buildSystemPrompt(bool jsonMode) const {
+    if (jsonMode) {
+        QString target;
+        if (m_settings.targetLanguage == "zh"_L1)
+            target = tr("translate it into Simplified Chinese");
+        else if (m_settings.targetLanguage == "en"_L1)
+            target = tr("translate it into English");
+        else
+            target = tr("if the text is Chinese, translate it into English; otherwise translate "
+                        "it into Simplified Chinese");
+
+        return tr("You are a translation and dictionary assistant. The user message contains a "
+                  "short text after \"Text:\" and may also contain the sentence it was found in "
+                  "after \"Sentence:\". First DECIDE whether the text is a single word or term "
+                  "(including compounds, hyphenated words, phrasal verbs, idioms and set phrases "
+                  "like \"ice cream\", \"take off\", \"画蛇添足\") or a longer phrase/sentence, "
+                  "then respond ONLY with a JSON object (no markdown, no extra text) in one of "
+                  "these two forms:\n"
+                  "1) Word/term: {\"type\": \"word\", \"word\": \"...\", \"phonetic\": \"IPA for "
+                  "English, pinyin for Chinese, may be empty\", \"pos\": \"part of speech, e.g. "
+                  "\\\"n.\\\"\", \"meaning\": \"a concise definition in the SAME language as the "
+                  "text, using simpler terms\", \"explanation\": \"1-2 sentences in the SAME "
+                  "language as the text, using simple everyday words\", \"example\": \"one short "
+                  "example sentence in the SAME language as the text\"}. If a Sentence is given, "
+                  "explain the meaning the word has IN THAT SENTENCE, not the generic "
+                  "dictionary one.\n"
+                  "2) Phrase/sentence: {\"type\": \"phrase\", \"translation\": \"...\"} — %1. If "
+                  "a Sentence is given, use it to resolve ambiguity (pronouns, tense, "
+                  "context-specific senses).")
+            .arg(target);
     }
     if (m_settings.targetLanguage == "zh"_L1)
         return tr(

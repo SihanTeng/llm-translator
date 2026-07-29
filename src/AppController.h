@@ -67,7 +67,7 @@ private:
     void applySettings(const AppSettings &settings);
     void checkForUpdates();
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
-    static bool isSingleWord(const QString &text);
+    static bool isShortText(const QString &text);
 
     SelectionMonitor *m_monitor;
     DeepSeekClient *m_client;
@@ -81,6 +81,6 @@ private:
     QString m_pendingContext;
     QPoint m_pendingPos;
     bool m_shellUiEnabled = false;
-    bool m_wordMode = false;
-    QString m_wordBuffer;
+    bool m_jsonMode = false;
+    QString m_jsonBuffer;
 };
