@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clang-format (pip build, matches local dev version)
+        run: |
+          pip install clang-format
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: clang-format check
+        run: clang-format --dry-run --Werror src/*.cpp src/*.h
+
+      - name: prettier check
+        run: npx --yes prettier --check extension/*.js
+
+      - name: JS syntax check
+        run: |
+          for f in extension/*.js; do
+            cp "$f" "/tmp/$(basename "$f" .js).mjs"
+            node --check "/tmp/$(basename "$f" .js).mjs"
+          done
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6.11
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.*'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libdbus-1-dev ninja-build
+
+      - name: Build (typecheck)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build

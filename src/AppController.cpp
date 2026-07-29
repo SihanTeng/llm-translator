@@ -26,21 +26,16 @@ AppController::AppController(QObject *parent)
     , m_monitor(new SelectionMonitor(this))
     , m_client(new DeepSeekClient(this))
     , m_popup(new PopupWindow)
-    , m_actionBar(new ActionBar)
-{
+    , m_actionBar(new ActionBar) {
     applySettings(AppSettings::load());
 
-    connect(m_monitor, &SelectionMonitor::selectionReady,
-            this, &AppController::onSelection);
-    connect(m_monitor, &SelectionMonitor::selectionCleared,
-            m_actionBar, &QWidget::hide);
-    connect(m_actionBar, &ActionBar::translateRequested,
-            this, &AppController::startPendingTranslation);
-    connect(m_popup, &PopupWindow::settingsRequested,
-            this, &AppController::openSettings);
+    connect(m_monitor, &SelectionMonitor::selectionReady, this, &AppController::onSelection);
+    connect(m_monitor, &SelectionMonitor::selectionCleared, m_actionBar, &QWidget::hide);
+    connect(
+        m_actionBar, &ActionBar::translateRequested, this, &AppController::startPendingTranslation);
+    connect(m_popup, &PopupWindow::settingsRequested, this, &AppController::openSettings);
     // Allow re-selecting the same text after the bar was dismissed.
-    connect(m_actionBar, &ActionBar::dismissed,
-            m_monitor, &SelectionMonitor::resetLastEmitted);
+    connect(m_actionBar, &ActionBar::dismissed, m_monitor, &SelectionMonitor::resetLastEmitted);
 
     // Word mode (single word -> structured dictionary explanation) is not
     // streamed to the UI; the raw JSON is buffered and formatted at the end.
@@ -75,7 +70,7 @@ AppController::AppController(QObject *parent)
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.registerService(QStringLiteral("org.translator.App"));
     bus.registerObject(QStringLiteral("/org/translator/App"), this,
-                       QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
+        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         auto *menu = new QMenu;
@@ -103,14 +98,12 @@ AppController::AppController(QObject *parent)
         openSettings();
 }
 
-void AppController::TranslateSelection(const QString &text, int x, int y)
-{
+void AppController::TranslateSelection(const QString &text, int x, int y) {
     TranslateSelectionWithContext(text, QString(), x, y);
 }
 
-void AppController::TranslateSelectionWithContext(const QString &text, const QString &context,
-                                                  int x, int y)
-{
+void AppController::TranslateSelectionWithContext(
+    const QString &text, const QString &context, int x, int y) {
     if (!m_settings.monitorEnabled)
         return;
     if (m_shellUiEnabled) {
@@ -122,26 +115,22 @@ void AppController::TranslateSelectionWithContext(const QString &text, const QSt
     offerTranslation(text, context, QPoint(x, y));
 }
 
-void AppController::SetShellUiEnabled(bool enabled)
-{
+void AppController::SetShellUiEnabled(bool enabled) {
     m_shellUiEnabled = enabled;
 }
 
-void AppController::ShowSettings()
-{
+void AppController::ShowSettings() {
     // openSettings() runs a modal dialog; defer it so the D-Bus method
     // returns immediately instead of blocking the caller until it closes.
     QTimer::singleShot(0, this, &AppController::openSettings);
 }
 
-void AppController::onSelection(const QString &text)
-{
+void AppController::onSelection(const QString &text) {
     offerTranslation(text, QString(), QCursor::pos());
 }
 
-void AppController::offerTranslation(const QString &text, const QString &context,
-                                     const QPoint &globalPos)
-{
+void AppController::offerTranslation(
+    const QString &text, const QString &context, const QPoint &globalPos) {
     m_client->cancel();
     m_popup->hide();
     m_pendingText = text;
@@ -150,16 +139,14 @@ void AppController::offerTranslation(const QString &text, const QString &context
     m_actionBar->offer(globalPos);
 }
 
-void AppController::startPendingTranslation()
-{
+void AppController::startPendingTranslation() {
     if (m_pendingText.isEmpty())
         return;
     startTranslation(m_pendingText, m_pendingContext, m_pendingPos, true);
 }
 
-void AppController::startTranslation(const QString &text, const QString &context,
-                                     const QPoint &globalPos, bool showPopup)
-{
+void AppController::startTranslation(
+    const QString &text, const QString &context, const QPoint &globalPos, bool showPopup) {
     m_client->cancel();
     m_wordMode = isSingleWord(text);
     m_wordBuffer.clear();
@@ -175,23 +162,20 @@ void AppController::startTranslation(const QString &text, const QString &context
     m_client->translate(userContent, buildSystemPrompt(m_wordMode), m_wordMode);
 }
 
-bool AppController::isSingleWord(const QString &text)
-{
+bool AppController::isSingleWord(const QString &text) {
     static const QRegularExpression whitespace(QStringLiteral("\\s"));
     const QString trimmed = text.trimmed();
     return !trimmed.isEmpty() && trimmed.size() < 40 && !trimmed.contains(whitespace);
 }
 
-void AppController::openSettings()
-{
+void AppController::openSettings() {
     SettingsDialog dialog;
     dialog.setSettings(m_settings);
     if (dialog.exec() == QDialog::Accepted)
         applySettings(dialog.settings());
 }
 
-void AppController::applySettings(const AppSettings &settings)
-{
+void AppController::applySettings(const AppSettings &settings) {
     m_settings = settings;
     m_settings.save();
     m_client->setApiKey(m_settings.effectiveApiKey());
@@ -200,8 +184,7 @@ void AppController::applySettings(const AppSettings &settings)
     m_monitor->setEnabled(m_settings.monitorEnabled);
 }
 
-QString AppController::buildSystemPrompt(bool wordMode) const
-{
+QString AppController::buildSystemPrompt(bool wordMode) const {
     if (wordMode) {
         // Monolingual learner's dictionary: explain the word in its own
         // language using simpler terms. When the user message includes a
@@ -220,8 +203,9 @@ QString AppController::buildSystemPrompt(bool wordMode) const
                   "the word has IN THAT SENTENCE and base the explanation on that usage.");
     }
     if (m_settings.targetLanguage == "zh"_L1)
-        return tr("You are a translation engine. Translate the user's text into Simplified Chinese. "
-                  "Output only the translation: no explanations, no quotes, no markup.");
+        return tr(
+            "You are a translation engine. Translate the user's text into Simplified Chinese. "
+            "Output only the translation: no explanations, no quotes, no markup.");
     if (m_settings.targetLanguage == "en"_L1)
         return tr("You are a translation engine. Translate the user's text into English. "
                   "Output only the translation: no explanations, no quotes, no markup.");
@@ -230,8 +214,7 @@ QString AppController::buildSystemPrompt(bool wordMode) const
               "Output only the translation: no explanations, no quotes, no markup.");
 }
 
-QString AppController::formatWordResult(const QString &jsonPayload) const
-{
+QString AppController::formatWordResult(const QString &jsonPayload) const {
     const QJsonDocument doc = QJsonDocument::fromJson(jsonPayload.toUtf8());
     if (!doc.isObject())
         return jsonPayload.toHtmlEscaped(); // model did not produce valid JSON
@@ -248,8 +231,8 @@ QString AppController::formatWordResult(const QString &jsonPayload) const
     };
 
     QString html = "<div style='margin-bottom:6px'>"
-                   "<span style='font-size:18px; font-weight:bold; color:" + accent + "'>"
-                   + field("word") + "</span>";
+                   "<span style='font-size:18px; font-weight:bold; color:"
+        + accent + "'>" + field("word") + "</span>";
     const QString phonetic = field("phonetic");
     if (!phonetic.isEmpty())
         html += "  <span style='color:" + muted + "'>" + phonetic + "</span>";
@@ -260,7 +243,8 @@ QString AppController::formatWordResult(const QString &jsonPayload) const
 
     const QString meaning = field("meaning");
     if (!meaning.isEmpty())
-        html += "<div style='font-weight:600; margin-top:8px; margin-bottom:8px'>" + meaning + "</div>";
+        html += "<div style='font-weight:600; margin-top:8px; margin-bottom:8px'>" + meaning
+            + "</div>";
     const QString explanation = field("explanation");
     if (!explanation.isEmpty())
         html += "<div style='margin-bottom:8px'>" + explanation + "</div>";

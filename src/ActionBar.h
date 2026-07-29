@@ -1,15 +1,14 @@
 #pragma once
 
-#include <QWidget>
 #include <QPoint>
+#include <QWidget>
 
 class QTimer;
 class QToolButton;
 
 // Compact action bar shown next to a fresh text selection. Clicking it
 // starts the translation; it hides on click-away, Esc, or a timeout.
-class ActionBar : public QWidget
-{
+class ActionBar : public QWidget {
     Q_OBJECT
 
 public:

@@ -9,8 +9,7 @@ class QTimer;
 // Watches the X11 PRIMARY selection ("highlight with mouse") and emits
 // selectionReady() for new, meaningful text. Changes are debounced so a
 // single drag-select produces one translation request.
-class SelectionMonitor : public QObject
-{
+class SelectionMonitor : public QObject {
     Q_OBJECT
 
 public:

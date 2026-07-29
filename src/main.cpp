@@ -2,8 +2,7 @@
 
 #include <QApplication>
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     // Runs natively on the session's platform (Wayland on modern distros).
     // On X11 sessions selections are monitored via QClipboard; on GNOME
     // Wayland the companion GNOME Shell extension forwards selections over

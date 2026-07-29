@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Git pre-commit hook: formatting (clang-format, prettier), linting
+# (node --check), typecheck (full build). Mirrors CI.
+#
+# Install:  ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+SELF="$(readlink -f "$0")"
+exec "$(dirname -- "$SELF")/check.sh"

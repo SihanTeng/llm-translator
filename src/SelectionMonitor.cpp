@@ -9,8 +9,7 @@ using namespace Qt::StringLiterals;
 SelectionMonitor::SelectionMonitor(QObject *parent)
     : QObject(parent)
     , m_clipboard(QGuiApplication::clipboard())
-    , m_debounce(new QTimer(this))
-{
+    , m_debounce(new QTimer(this)) {
     m_debounce->setSingleShot(true);
     m_debounce->setInterval(kDebounceMs);
 
@@ -22,8 +21,8 @@ SelectionMonitor::SelectionMonitor(QObject *parent)
         return;
     }
 
-    connect(m_clipboard, &QClipboard::selectionChanged,
-            this, &SelectionMonitor::onSelectionChanged);
+    connect(
+        m_clipboard, &QClipboard::selectionChanged, this, &SelectionMonitor::onSelectionChanged);
 
     connect(m_debounce, &QTimer::timeout, this, [this] {
         const QString text = m_pending.trimmed();
@@ -41,15 +40,13 @@ SelectionMonitor::SelectionMonitor(QObject *parent)
     });
 }
 
-void SelectionMonitor::setEnabled(bool enabled)
-{
+void SelectionMonitor::setEnabled(bool enabled) {
     m_enabled = enabled;
     if (!enabled)
         m_debounce->stop();
 }
 
-void SelectionMonitor::onSelectionChanged()
-{
+void SelectionMonitor::onSelectionChanged() {
     if (!m_enabled)
         return;
     // Ignore selections made inside our own popup window.

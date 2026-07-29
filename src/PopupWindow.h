@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QWidget>
 #include <QString>
+#include <QWidget>
 
 class QLabel;
 class QTextBrowser;
@@ -9,8 +9,7 @@ class QToolButton;
 
 // Frameless, always-on-top popup shown next to the text selection.
 // Displays the streamed translation as it arrives.
-class PopupWindow : public QWidget
-{
+class PopupWindow : public QWidget {
     Q_OBJECT
 
 public:

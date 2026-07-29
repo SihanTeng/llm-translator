@@ -9,17 +9,15 @@
 #include <QGuiApplication>
 #include <QMargins>
 #include <QScreen>
-#include <QWindow>
 #include <QWidget>
+#include <QWindow>
 
-bool LayerShellPopup::isSupported()
-{
+bool LayerShellPopup::isSupported() {
     return QGuiApplication::platformName() == QLatin1String("wayland")
         && LayerShellQt::Window::isSupported();
 }
 
-void LayerShellPopup::placeAt(QWidget *window, const QPoint &globalPos)
-{
+void LayerShellPopup::placeAt(QWidget *window, const QPoint &globalPos) {
     QScreen *screen = QGuiApplication::screenAt(globalPos);
     if (!screen)
         screen = QGuiApplication::primaryScreen();
@@ -31,12 +29,11 @@ void LayerShellPopup::placeAt(QWidget *window, const QPoint &globalPos)
     LayerShellQt::Window *layerShell = LayerShellQt::Window::get(handle);
     layerShell->setLayer(LayerShellQt::Window::LayerOverlay);
     layerShell->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    layerShell->setAnchors(LayerShellQt::Window::Anchors{
-        LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft});
+    layerShell->setAnchors(LayerShellQt::Window::Anchors {
+        LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft });
 
     const QPoint origin = screen->geometry().topLeft();
-    layerShell->setMargins(QMargins(globalPos.x() - origin.x(),
-                                    globalPos.y() - origin.y(), 0, 0));
+    layerShell->setMargins(QMargins(globalPos.x() - origin.x(), globalPos.y() - origin.y(), 0, 0));
 
     window->show();
 }

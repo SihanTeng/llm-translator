@@ -13,12 +13,9 @@ using namespace Qt::StringLiterals;
 
 DeepSeekClient::DeepSeekClient(QObject *parent)
     : QObject(parent)
-    , m_nam(new QNetworkAccessManager(this))
-{
-}
+    , m_nam(new QNetworkAccessManager(this)) { }
 
-void DeepSeekClient::translate(const QString &text, const QString &systemPrompt, bool jsonMode)
-{
+void DeepSeekClient::translate(const QString &text, const QString &systemPrompt, bool jsonMode) {
     cancel();
 
     if (m_apiKey.isEmpty()) {
@@ -29,18 +26,19 @@ void DeepSeekClient::translate(const QString &text, const QString &systemPrompt,
 
     m_jsonMode = jsonMode;
 
-    QJsonObject body{
-        {"model"_L1, m_model},
-        {"stream"_L1, !jsonMode},
+    QJsonObject body {
+        { "model"_L1, m_model },
+        { "stream"_L1, !jsonMode },
         // Low-latency popup: disable thinking mode (it defaults to enabled on v4 models).
-        {"thinking"_L1, QJsonObject{{"type"_L1, "disabled"_L1}}},
-        {"messages"_L1, QJsonArray{
-            QJsonObject{{"role"_L1, "system"_L1}, {"content"_L1, systemPrompt}},
-            QJsonObject{{"role"_L1, "user"_L1}, {"content"_L1, text}},
-        }},
+        { "thinking"_L1, QJsonObject { { "type"_L1, "disabled"_L1 } } },
+        { "messages"_L1,
+            QJsonArray {
+                QJsonObject { { "role"_L1, "system"_L1 }, { "content"_L1, systemPrompt } },
+                QJsonObject { { "role"_L1, "user"_L1 }, { "content"_L1, text } },
+            } },
     };
     if (jsonMode)
-        body["response_format"_L1] = QJsonObject{{"type"_L1, "json_object"_L1}};
+        body["response_format"_L1] = QJsonObject { { "type"_L1, "json_object"_L1 } };
 
     QNetworkRequest request(QUrl(m_baseUrl + "/chat/completions"_L1));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"_L1);
@@ -54,8 +52,7 @@ void DeepSeekClient::translate(const QString &text, const QString &systemPrompt,
     connect(m_reply, &QNetworkReply::finished, this, &DeepSeekClient::onFinished);
 }
 
-void DeepSeekClient::cancel()
-{
+void DeepSeekClient::cancel() {
     // Clear m_reply first: abort() can emit finished() synchronously, and
     // onFinished() would otherwise deleteLater() the same reply a second time.
     QNetworkReply *reply = m_reply;
@@ -66,8 +63,7 @@ void DeepSeekClient::cancel()
     reply->deleteLater();
 }
 
-void DeepSeekClient::onReadyRead()
-{
+void DeepSeekClient::onReadyRead() {
     if (!m_reply)
         return;
 
@@ -89,7 +85,7 @@ void DeepSeekClient::onReadyRead()
         if (payload == "[DONE]")
             continue;
 
-        QJsonParseError parseError{};
+        QJsonParseError parseError { };
         const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
         if (parseError.error != QJsonParseError::NoError)
             continue;
@@ -103,8 +99,7 @@ void DeepSeekClient::onReadyRead()
     }
 }
 
-void DeepSeekClient::onFinished()
-{
+void DeepSeekClient::onFinished() {
     QNetworkReply *reply = m_reply;
     if (!reply)
         return;
@@ -122,8 +117,8 @@ void DeepSeekClient::onFinished()
         if (detail.size() > 300)
             detail = detail.left(300) + u"…"_s;
         emit errorOccurred(status > 0
-            ? tr("DeepSeek request failed (HTTP %1): %2").arg(status).arg(detail)
-            : tr("Network error: %1").arg(reply->errorString()));
+                ? tr("DeepSeek request failed (HTTP %1): %2").arg(status).arg(detail)
+                : tr("Network error: %1").arg(reply->errorString()));
     }
 
     reply->deleteLater();
@@ -136,8 +131,8 @@ void DeepSeekClient::onFinished()
             const QJsonDocument doc = QJsonDocument::fromJson(body);
             const QJsonArray choices = doc["choices"_L1].toArray();
             if (!choices.isEmpty()) {
-                const QString content = choices[0].toObject()["message"_L1]
-                                            .toObject()["content"_L1].toString();
+                const QString content
+                    = choices[0].toObject()["message"_L1].toObject()["content"_L1].toString();
                 if (!content.isEmpty())
                     emit tokenReceived(content);
             }

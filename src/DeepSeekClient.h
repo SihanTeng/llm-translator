@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QObject>
 #include <QByteArray>
+#include <QObject>
 #include <QString>
 
 class QNetworkAccessManager;
@@ -10,8 +10,7 @@ class QNetworkReply;
 // Streaming client for DeepSeek's OpenAI-compatible chat completions API.
 // Bring-your-own-key: the key is only ever sent to the configured base URL
 // (https://api.deepseek.com by default).
-class DeepSeekClient : public QObject
-{
+class DeepSeekClient : public QObject {
     Q_OBJECT
 
 public:

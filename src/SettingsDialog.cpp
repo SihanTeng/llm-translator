@@ -13,8 +13,7 @@
 
 using namespace Qt::StringLiterals;
 
-AppSettings AppSettings::load()
-{
+AppSettings AppSettings::load() {
     const QSettings store(u"translator"_s, u"translator"_s);
     AppSettings s;
     s.apiKey = store.value(u"apiKey"_s).toString();
@@ -25,8 +24,7 @@ AppSettings AppSettings::load()
     return s;
 }
 
-void AppSettings::save() const
-{
+void AppSettings::save() const {
     QSettings store(u"translator"_s, u"translator"_s);
     store.setValue(u"apiKey"_s, apiKey);
     store.setValue(u"baseUrl"_s, baseUrl);
@@ -35,8 +33,7 @@ void AppSettings::save() const
     store.setValue(u"monitorEnabled"_s, monitorEnabled);
 }
 
-QString AppSettings::effectiveApiKey() const
-{
+QString AppSettings::effectiveApiKey() const {
     const QString envKey = QProcessEnvironment::systemEnvironment().value(u"DEEPSEEK_API_KEY"_s);
     return envKey.isEmpty() ? apiKey : envKey;
 }
@@ -47,8 +44,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     , m_baseUrlEdit(new QLineEdit(this))
     , m_modelCombo(new QComboBox(this))
     , m_languageCombo(new QComboBox(this))
-    , m_enabledCheck(new QCheckBox(tr("Translate automatically when text is selected"), this))
-{
+    , m_enabledCheck(new QCheckBox(tr("Translate automatically when text is selected"), this)) {
     setWindowTitle(tr("Translator Settings"));
     setWindowIcon(QIcon::fromTheme(QStringLiteral("emblem-system")));
     setMinimumWidth(420);
@@ -92,8 +88,10 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_languageCombo->addItem(tr("Simplified Chinese"), u"zh"_s);
     m_languageCombo->addItem(tr("English"), u"en"_s);
 
-    auto *envNote = new QLabel(tr("The API key is stored locally and only sent to the base URL above.\n"
-                                  "DEEPSEEK_API_KEY overrides the stored key."), this);
+    auto *envNote
+        = new QLabel(tr("The API key is stored locally and only sent to the base URL above.\n"
+                        "DEEPSEEK_API_KEY overrides the stored key."),
+            this);
     envNote->setWordWrap(true);
     envNote->setStyleSheet("color: palette(mid); font-size: 11px;"_L1);
 
@@ -114,8 +112,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     form->addRow(buttons);
 }
 
-void SettingsDialog::setSettings(const AppSettings &settings)
-{
+void SettingsDialog::setSettings(const AppSettings &settings) {
     m_apiKeyEdit->setText(settings.apiKey);
     m_baseUrlEdit->setText(settings.baseUrl);
     m_modelCombo->setCurrentText(settings.model);
@@ -126,8 +123,7 @@ void SettingsDialog::setSettings(const AppSettings &settings)
     m_enabledCheck->setChecked(settings.monitorEnabled);
 }
 
-AppSettings SettingsDialog::settings() const
-{
+AppSettings SettingsDialog::settings() const {
     AppSettings s;
     s.apiKey = m_apiKeyEdit->text().trimmed();
     s.baseUrl = m_baseUrlEdit->text().trimmed();

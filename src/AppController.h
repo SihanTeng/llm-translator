@@ -1,8 +1,8 @@
 #pragma once
 
+#include "SettingsDialog.h"
 #include <QObject>
 #include <QPoint>
-#include "SettingsDialog.h"
 
 class ActionBar;
 class DeepSeekClient;
@@ -18,8 +18,7 @@ class QSystemTrayIcon;
 //  - GNOME Wayland: the companion GNOME Shell extension forwards selections
 //    to the TranslateSelection D-Bus slot (Wayland does not let background
 //    apps read other apps' selections).
-class AppController : public QObject
-{
+class AppController : public QObject {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.translator.App")
 
@@ -60,7 +59,8 @@ private:
     void onSelection(const QString &text);
     void offerTranslation(const QString &text, const QString &context, const QPoint &globalPos);
     void startPendingTranslation();
-    void startTranslation(const QString &text, const QString &context, const QPoint &globalPos, bool showPopup);
+    void startTranslation(
+        const QString &text, const QString &context, const QPoint &globalPos, bool showPopup);
     void openSettings();
     void applySettings(const AppSettings &settings);
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;

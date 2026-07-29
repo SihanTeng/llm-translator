@@ -12,29 +12,28 @@
 using namespace Qt::StringLiterals;
 
 ActionBar::ActionBar(QWidget *parent)
-    : QWidget(parent, [] {
-        // On X11 a normal window that appears without taking focus makes
-        // GNOME Shell post a "<app> is ready" notification. A tooltip-type
-        // window (override-redirect) avoids that; the bar never takes focus
-        // anyway. On Wayland, window placement/typing is the compositor's
-        // business, so keep a plain frameless window there.
-        Qt::WindowFlags flags = Qt::Window | Qt::FramelessWindowHint
-                              | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
-        if (QGuiApplication::platformName() == "xcb"_L1)
-            flags = Qt::ToolTip | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
-        return flags;
-    }())
+    : QWidget(parent,
+          [] {
+              // On X11 a normal window that appears without taking focus makes
+              // GNOME Shell post a "<app> is ready" notification. A tooltip-type
+              // window (override-redirect) avoids that; the bar never takes focus
+              // anyway. On Wayland, window placement/typing is the compositor's
+              // business, so keep a plain frameless window there.
+              Qt::WindowFlags flags = Qt::Window | Qt::FramelessWindowHint
+                  | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
+              if (QGuiApplication::platformName() == "xcb"_L1)
+                  flags = Qt::ToolTip | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus;
+              return flags;
+          }())
     , m_button(new QToolButton(this))
-    , m_autoHide(new QTimer(this))
-{
+    , m_autoHide(new QTimer(this)) {
     setAttribute(Qt::WA_DeleteOnClose, false);
     // Never steal keyboard focus: the user must still be able to Ctrl+C the
     // selection in the source app while the bar is visible.
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAttribute(Qt::WA_X11DoNotAcceptFocus);
 
-    const QIcon translateIcon = QIcon::fromTheme(
-        QStringLiteral("accessories-dictionary"),
+    const QIcon translateIcon = QIcon::fromTheme(QStringLiteral("accessories-dictionary"),
         QIcon::fromTheme(QStringLiteral("preferences-desktop-locale")));
     if (translateIcon.isNull())
         m_button->setText(tr("Translate"));
@@ -44,10 +43,9 @@ ActionBar::ActionBar(QWidget *parent)
     }
     m_button->setToolTip(tr("Translate"));
     m_button->setCursor(Qt::PointingHandCursor);
-    m_button->setStyleSheet(
-        "QToolButton { color: white; background: #2d7dff; border-radius: 4px; "
-        "padding: 4px 12px; font-weight: bold; }"
-        "QToolButton:hover { background: #4a90ff; }"_L1);
+    m_button->setStyleSheet("QToolButton { color: white; background: #2d7dff; border-radius: 4px; "
+                            "padding: 4px 12px; font-weight: bold; }"
+                            "QToolButton:hover { background: #4a90ff; }"_L1);
 
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
@@ -66,8 +64,7 @@ ActionBar::ActionBar(QWidget *parent)
     });
 }
 
-void ActionBar::offer(const QPoint &globalPos)
-{
+void ActionBar::offer(const QPoint &globalPos) {
     adjustSize();
 
     QScreen *screen = QGuiApplication::screenAt(globalPos);
@@ -87,8 +84,7 @@ void ActionBar::offer(const QPoint &globalPos)
     raise();
 }
 
-void ActionBar::keyPressEvent(QKeyEvent *event)
-{
+void ActionBar::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Escape) {
         hide();
         return;
@@ -96,8 +92,7 @@ void ActionBar::keyPressEvent(QKeyEvent *event)
     QWidget::keyPressEvent(event);
 }
 
-void ActionBar::paintEvent(QPaintEvent *event)
-{
+void ActionBar::paintEvent(QPaintEvent *event) {
     // Required so the stylesheet background/border on this QWidget subclass
     // actually gets painted.
     QStyleOption option;
@@ -107,15 +102,13 @@ void ActionBar::paintEvent(QPaintEvent *event)
     QWidget::paintEvent(event);
 }
 
-void ActionBar::hideEvent(QHideEvent *event)
-{
+void ActionBar::hideEvent(QHideEvent *event) {
     m_autoHide->stop();
     emit dismissed();
     QWidget::hideEvent(event);
 }
 
-bool ActionBar::event(QEvent *event)
-{
+bool ActionBar::event(QEvent *event) {
     if (event->type() == QEvent::WindowDeactivate && isVisible())
         hide();
     return QWidget::event(event);

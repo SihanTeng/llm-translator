@@ -21,8 +21,7 @@ PopupWindow::PopupWindow(QWidget *parent)
     , m_sourceLabel(new QLabel(this))
     , m_resultView(new QTextBrowser(this))
     , m_copyButton(new QToolButton(this))
-    , m_closeButton(new QToolButton(this))
-{
+    , m_closeButton(new QToolButton(this)) {
     setAttribute(Qt::WA_DeleteOnClose, false);
     // Width/height are sized per screen in placeNear() (responsive):
     // generous fraction of the available geometry, height tracks content.
@@ -56,9 +55,9 @@ PopupWindow::PopupWindow(QWidget *parent)
     m_closeButton->setAutoRaise(true);
     m_closeButton->setFixedSize(28, 28);
     m_closeButton->setIconSize(QSize(16, 16));
-    const QString headerButtonStyle =
-        "QToolButton { color: palette(mid); padding: 2px 8px; border-radius: 4px; }"
-        "QToolButton:hover { color: palette(text); background: palette(midlight); }"_L1;
+    const QString headerButtonStyle
+        = "QToolButton { color: palette(mid); padding: 2px 8px; border-radius: 4px; }"
+          "QToolButton:hover { color: palette(text); background: palette(midlight); }"_L1;
     m_copyButton->setStyleSheet(headerButtonStyle);
     m_closeButton->setStyleSheet(headerButtonStyle);
 
@@ -97,8 +96,8 @@ PopupWindow::PopupWindow(QWidget *parent)
 
     connect(m_copyButton, &QToolButton::clicked, this, [this] {
         QGuiApplication::clipboard()->setText(m_result, QClipboard::Clipboard);
-        const QIcon okIcon = QIcon::fromTheme(QStringLiteral("object-select"),
-                                              QIcon::fromTheme(QStringLiteral("emblem-ok")));
+        const QIcon okIcon = QIcon::fromTheme(
+            QStringLiteral("object-select"), QIcon::fromTheme(QStringLiteral("emblem-ok")));
         if (!okIcon.isNull() && !m_copyButton->icon().isNull()) {
             const QIcon original = m_copyButton->icon();
             m_copyButton->setIcon(okIcon);
@@ -112,8 +111,7 @@ PopupWindow::PopupWindow(QWidget *parent)
     connect(settingsButton, &QToolButton::clicked, this, &PopupWindow::settingsRequested);
 }
 
-void PopupWindow::startTranslation(const QString &sourceText, const QPoint &globalPos)
-{
+void PopupWindow::startTranslation(const QString &sourceText, const QPoint &globalPos) {
     m_result.clear();
     m_resultView->setPlainText(tr("Translating…"));
 
@@ -128,8 +126,7 @@ void PopupWindow::startTranslation(const QString &sourceText, const QPoint &glob
     activateWindow();
 }
 
-void PopupWindow::appendToken(const QString &delta)
-{
+void PopupWindow::appendToken(const QString &delta) {
     if (m_result.isEmpty())
         m_resultView->clear();
     m_result += delta;
@@ -137,22 +134,19 @@ void PopupWindow::appendToken(const QString &delta)
     ensureOnScreen();
 }
 
-void PopupWindow::setResult(const QString &html)
-{
+void PopupWindow::setResult(const QString &html) {
     m_resultView->setHtml(html);
     // Keep the plain-text form for the Copy button.
     m_result = m_resultView->toPlainText();
     ensureOnScreen();
 }
 
-void PopupWindow::showError(const QString &message)
-{
+void PopupWindow::showError(const QString &message) {
     m_resultView->setPlainText(message);
     ensureOnScreen();
 }
 
-void PopupWindow::placeNear(const QPoint &globalPos)
-{
+void PopupWindow::placeNear(const QPoint &globalPos) {
     QScreen *screen = QGuiApplication::screenAt(globalPos);
     if (!screen)
         screen = QGuiApplication::primaryScreen();
@@ -176,8 +170,7 @@ void PopupWindow::placeNear(const QPoint &globalPos)
     move(pos);
 }
 
-void PopupWindow::ensureOnScreen()
-{
+void PopupWindow::ensureOnScreen() {
     adjustSize();
 
     QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
@@ -199,8 +192,7 @@ void PopupWindow::ensureOnScreen()
         move(p);
 }
 
-void PopupWindow::keyPressEvent(QKeyEvent *event)
-{
+void PopupWindow::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Escape) {
         hide();
         return;
@@ -208,8 +200,7 @@ void PopupWindow::keyPressEvent(QKeyEvent *event)
     QWidget::keyPressEvent(event);
 }
 
-void PopupWindow::paintEvent(QPaintEvent *event)
-{
+void PopupWindow::paintEvent(QPaintEvent *event) {
     // Required so the stylesheet background/border on this QWidget subclass
     // actually gets painted.
     QStyleOption option;
@@ -219,8 +210,7 @@ void PopupWindow::paintEvent(QPaintEvent *event)
     QWidget::paintEvent(event);
 }
 
-bool PopupWindow::event(QEvent *event)
-{
+bool PopupWindow::event(QEvent *event) {
     if (event->type() == QEvent::WindowDeactivate && isVisible())
         hide();
     return QWidget::event(event);
