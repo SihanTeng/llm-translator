@@ -45,7 +45,7 @@ esac
 [ "$new" != "$current" ] || { echo "error: version $new is not a bump" >&2; exit 1; }
 
 sed -i -E "s/project[(]translator VERSION [0-9.]+/project(translator VERSION $new/" CMakeLists.txt
-grep -q "project(translator VERSION $new)" CMakeLists.txt || {
+grep -qF "project(translator VERSION $new" CMakeLists.txt || {
     echo "error: failed to update CMakeLists.txt" >&2
     exit 1
 }
