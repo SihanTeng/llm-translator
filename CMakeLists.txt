@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(translator VERSION 0.1.2 LANGUAGES CXX)
+project(translator VERSION 0.2.0 LANGUAGES CXX)
 
 # Version embedded in the app; the release workflow overrides it from the tag
 # (-DTRANSLATOR_VERSION=1.2.3) so artifacts never carry a stale version.
