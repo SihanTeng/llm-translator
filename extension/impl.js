@@ -172,6 +172,17 @@ export class TranslatorImpl {
         this._destroyPanel();
         this._translation = '';
 
+        // Fullscreen transparent click-catcher below the panel: clicking
+        // anywhere outside the panel dismisses it (menu-style semantics).
+        this._backdrop = new St.Widget({reactive: true});
+        this._backdrop.set_position(0, 0);
+        this._backdrop.set_size(global.stage.width, global.stage.height);
+        this._backdrop.connect('button-press-event', () => {
+            this._destroyPanel();
+            return Clutter.EVENT_STOP;
+        });
+        Main.layoutManager.uiGroup.add_child(this._backdrop);
+
         this._panel = new St.BoxLayout({
             vertical: true,
             style: PANEL_STYLE,
@@ -395,5 +406,7 @@ export class TranslatorImpl {
         this._panel?.destroy();
         this._panel = null;
         this._translationLabel = null;
+        this._backdrop?.destroy();
+        this._backdrop = null;
     }
 }
