@@ -67,7 +67,6 @@ private:
     void applySettings(const AppSettings &settings);
     void checkForUpdates();
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
-    [[nodiscard]] QString formatWordResult(const QString &jsonPayload) const;
     static bool isSingleWord(const QString &text);
 
     SelectionMonitor *m_monitor;

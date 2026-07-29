@@ -33,11 +33,15 @@ SelectionMonitor::SelectionMonitor(QObject *parent)
         }
         if (text == m_lastEmitted)
             return;
-        if (text.size() < kMinLength || text.size() > kMaxLength)
+        if (!isAcceptableSelection(text))
             return;
         m_lastEmitted = text;
         emit selectionReady(text);
     });
+}
+
+bool SelectionMonitor::isAcceptableSelection(const QString &text) {
+    return text.size() >= kMinLength && text.size() <= kMaxLength;
 }
 
 void SelectionMonitor::setEnabled(bool enabled) {

@@ -22,6 +22,9 @@ public:
     // again (e.g. after the action bar was dismissed).
     void resetLastEmitted() { m_lastEmitted.clear(); }
 
+    // Accepts trimmed selections in the [2, 4000] character range.
+    static bool isAcceptableSelection(const QString &text);
+
 signals:
     void selectionReady(const QString &text);
     // Emitted when the PRIMARY selection becomes empty (user clicked away /

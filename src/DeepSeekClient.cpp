@@ -85,18 +85,22 @@ void DeepSeekClient::onReadyRead() {
         if (payload == "[DONE]")
             continue;
 
-        QJsonParseError parseError { };
-        const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
-        if (parseError.error != QJsonParseError::NoError)
-            continue;
-
-        const QJsonArray choices = doc["choices"_L1].toArray();
-        if (choices.isEmpty())
-            continue;
-        const QString delta = choices[0].toObject()["delta"_L1].toObject()["content"_L1].toString();
+        const QString delta = parseDelta(payload);
         if (!delta.isEmpty())
             emit tokenReceived(delta);
     }
+}
+
+QString DeepSeekClient::parseDelta(const QByteArray &payload) {
+    QJsonParseError parseError { };
+    const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+    if (parseError.error != QJsonParseError::NoError)
+        return { };
+
+    const QJsonArray choices = doc["choices"_L1].toArray();
+    if (choices.isEmpty())
+        return { };
+    return choices[0].toObject()["delta"_L1].toObject()["content"_L1].toString();
 }
 
 void DeepSeekClient::onFinished() {

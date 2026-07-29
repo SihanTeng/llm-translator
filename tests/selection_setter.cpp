@@ -8,16 +8,14 @@
 #include <QTextStream>
 #include <QTimer>
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     if (argc < 2) {
         qWarning("usage: %s <text> [holdSeconds]", argv[0]);
         return 2;
     }
 
-    QGuiApplication::clipboard()->setText(QString::fromLocal8Bit(argv[1]),
-                                          QClipboard::Selection);
+    QGuiApplication::clipboard()->setText(QString::fromLocal8Bit(argv[1]), QClipboard::Selection);
     QTextStream(stdout) << "PRIMARY selection set" << '\n';
 
     const int holdSeconds = argc > 2 ? QString::fromLocal8Bit(argv[2]).toInt() : 8;

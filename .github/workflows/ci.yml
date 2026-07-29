@@ -51,3 +51,30 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6.11
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.*'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libdbus-1-dev \
+              ninja-build dbus libglib2.0-bin python3
+
+      - name: Build (with tests)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Unit tests (ctest)
+        run: cd build && ctest --output-on-failure
+
+      - name: E2E tests (real app + D-Bus + mock DeepSeek)
+        run: ./tests/e2e.sh

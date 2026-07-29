@@ -26,6 +26,10 @@ public:
     void translate(const QString &text, const QString &systemPrompt, bool jsonMode = false);
     void cancel();
 
+    // Parses one SSE "data:" JSON payload and returns the delta content
+    // (empty when the payload is invalid or carries no content).
+    static QString parseDelta(const QByteArray &payload);
+
 signals:
     void tokenReceived(const QString &delta);
     void requestFinished();

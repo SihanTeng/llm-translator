@@ -5,17 +5,15 @@
 #include "PopupWindow.h"
 #include "SelectionMonitor.h"
 #include "Updater.h"
+#include "WordFormatter.h"
 
 #include <QApplication>
 #include <QCursor>
 #include <QDBusConnection>
 #include <QDesktopServices>
 #include <QGuiApplication>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPalette>
 #include <QPixmap>
 #include <QProgressDialog>
 #include <QRegularExpression>
@@ -53,7 +51,7 @@ AppController::AppController(QObject *parent)
     });
     connect(m_client, &DeepSeekClient::requestFinished, this, [this] {
         if (m_wordMode) {
-            const QString html = formatWordResult(m_wordBuffer);
+            const QString html = formatWordCardHtml(m_wordBuffer);
             m_popup->setResult(html);
             // The Shell extension renders its own structured card from the
             // raw JSON (St widgets cannot render HTML).
@@ -272,44 +270,4 @@ QString AppController::buildSystemPrompt(bool wordMode) const {
     return tr("You are a translation engine. If the user's text is Chinese, translate it into "
               "English; otherwise translate it into Simplified Chinese. "
               "Output only the translation: no explanations, no quotes, no markup.");
-}
-
-QString AppController::formatWordResult(const QString &jsonPayload) const {
-    const QJsonDocument doc = QJsonDocument::fromJson(jsonPayload.toUtf8());
-    if (!doc.isObject())
-        return jsonPayload.toHtmlEscaped(); // model did not produce valid JSON
-
-    // Palette-driven, so the card follows the system theme (Adwaita
-    // light/dark) instead of hardcoded colors.
-    const QPalette palette = qApp->palette();
-    const QString accent = palette.color(QPalette::Link).name();
-    const QString muted = palette.color(QPalette::PlaceholderText).name();
-
-    const QJsonObject obj = doc.object();
-    const auto field = [&obj](const char *key) {
-        return obj[QLatin1StringView(key)].toString().toHtmlEscaped();
-    };
-
-    QString html = "<div style='margin-bottom:6px'>"
-                   "<span style='font-size:18px; font-weight:bold; color:"
-        + accent + "'>" + field("word") + "</span>";
-    const QString phonetic = field("phonetic");
-    if (!phonetic.isEmpty())
-        html += "  <span style='color:" + muted + "'>" + phonetic + "</span>";
-    const QString pos = field("pos");
-    if (!pos.isEmpty())
-        html += "  <span style='color:" + muted + "'>" + pos + "</span>";
-    html += "</div>";
-
-    const QString meaning = field("meaning");
-    if (!meaning.isEmpty())
-        html += "<div style='font-weight:600; margin-top:8px; margin-bottom:8px'>" + meaning
-            + "</div>";
-    const QString explanation = field("explanation");
-    if (!explanation.isEmpty())
-        html += "<div style='margin-bottom:8px'>" + explanation + "</div>";
-    const QString example = field("example");
-    if (!example.isEmpty())
-        html += "<div style='color:" + muted + "'>" + example + "</div>";
-    return html;
 }

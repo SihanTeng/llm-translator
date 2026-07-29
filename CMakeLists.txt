@@ -23,6 +23,7 @@ qt_add_executable(translator
     src/PopupWindow.cpp
     src/SettingsDialog.cpp
     src/Updater.cpp
+    src/WordFormatter.cpp
 )
 
 target_link_libraries(translator PRIVATE
@@ -47,6 +48,13 @@ if(TRANSLATOR_WITH_LAYERSHELL)
     )
     target_link_libraries(translator PRIVATE LayerShellQt::Interface)
     target_compile_definitions(translator PRIVATE TRANSLATOR_HAVE_LAYERSHELL)
+endif()
+
+# ---- tests ----
+option(TRANSLATOR_BUILD_TESTS "Build unit tests" ON)
+if(TRANSLATOR_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # ---- install + packaging (RPM via CPack) ----

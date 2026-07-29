@@ -109,25 +109,33 @@ Settings are stored in `~/.config/translator/translator.conf`.
 
 ## Development
 
-`tests/` contains smoke-test helpers:
+`dev.sh` runs the dev loop: rebuild + restart the app on C++ changes, and
+hot-reload the GNOME Shell extension (`extension/impl.js`) on save.
 
-- `mock_deepseek_server.py` — local OpenAI-compatible SSE endpoint on
-  `127.0.0.1:8931`.
-- `sse_client_test.cpp` — exercises `DeepSeekClient` streaming end to end.
-- `selection_setter.cpp` — owns the X11 PRIMARY selection with given text.
+### Tests
 
-With the mock server running and the app pointed at it (base URL
-`http://127.0.0.1:8931`), the D-Bus path can be triggered manually — it
-shows the action bar without making a request:
+Unit tests are Qt Test executables wired into CTest; the e2e script drives
+the real app over D-Bus against a mock DeepSeek server (no display needed):
 
 ```sh
-gdbus call --session --dest org.translator.App \
-    --object-path /org/translator/App \
-    --method org.translator.App.TranslateSelection "Hello world" 640 400
+cmake --build build
+cd build && ctest --output-on-failure   # 6 unit suites
+cd .. && ./tests/e2e.sh                 # phrase stream, word JSON+context, 401 path
 ```
 
-`action_bar_test.cpp` verifies the click-to-translate flow (click emits
-`translateRequested`, bar hides, `dismissed` fires).
+- `tests/tst_*.cpp` — semver compare, SSE delta parsing, dictionary card
+  HTML (incl. XSS escaping), selection filter, settings roundtrip
+  (isolated via `XDG_CONFIG_HOME`), action bar signals.
+- `tests/e2e.sh` — real binary + `dbus-run-session` +
+  `tests/mock_deepseek_server.py`; asserts request shapes (stream vs JSON
+  mode, `Word:`/`Sentence:` context) and D-Bus signal flows.
+- `tests/selection_setter.cpp` — manual helper: owns the X11 PRIMARY
+  selection with given text for interactive testing.
+- `TRANSLATOR_SETTINGS_DIR` env var isolates app settings from the real
+  `~/.config` (used by the e2e script).
+
+Pre-commit runs `scripts/check.sh` (clang-format, prettier, node --check,
+full build); CI mirrors it and adds the test jobs on every push.
 
 ## Notes on the DeepSeek integration
 
