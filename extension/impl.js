@@ -22,8 +22,6 @@ const PANEL_STYLE = 'background-color: rgba(36,38,40,0.98); color: #ececec; font
     'box-shadow: 0 2px 8px rgba(0,0,0,0.35); max-height: 1680px;';
 const SOURCE_STYLE = 'color: #9a9a9a; font-size: 11px;';
 const MUTED_STYLE = 'color: #9a9a9a;';
-const HEADER_BUTTON_STYLE = 'color: #9a9a9a; background-color: transparent; ' +
-    'border-radius: 6px; padding: 3px 10px;';
 const ICON_BUTTON_STYLE = 'color: #9a9a9a; background-color: transparent; ' +
     'border-radius: 6px; padding: 6px;';
 const ICON_SIZE = 16;
@@ -226,7 +224,7 @@ export class TranslatorImpl {
         this._panel.add_child(this._translationLabel);
 
         const footer = new St.BoxLayout({vertical: false});
-        const settingsButton = new St.Button({label: 'Settings', style: HEADER_BUTTON_STYLE, reactive: true});
+        const settingsButton = this._iconButton('emblem-system-symbolic');
         settingsButton.connect('clicked', () => {
             Gio.DBus.session.call(
                 DBUS_NAME, DBUS_PATH, DBUS_IFACE, 'ShowSettings',
