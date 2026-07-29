@@ -298,7 +298,7 @@ export class TranslatorImpl {
         };
         addRow(card.meaning, 'font-weight: 600; margin-top: 8px;');
         addRow(card.explanation, 'margin-top: 8px;');
-        addRow(card.example, `${MUTED_STYLE} margin-top: 8px;`);
+        addRow(card.example, `${MUTED_STYLE} font-size: 13px; margin-top: 10px;`);
 
         this._panel.insert_child_below(box, this._footer);
     }
