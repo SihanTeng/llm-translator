@@ -46,7 +46,10 @@ jobs:
               -d packaging/translator.desktop \
               -i packaging/translator.png \
               --plugin qt --output appimage
-          mv translator-*.AppImage translator-x86_64.AppImage
+          # linuxdeploy names the output after the desktop entry (capitalized);
+          # exclude the downloaded linuxdeploy tools themselves.
+          appimage_file=$(ls *.AppImage | grep -v '^linuxdeploy' | head -1)
+          mv "$appimage_file" translator-x86_64.AppImage
 
       - name: Package source tarball
         run: |
