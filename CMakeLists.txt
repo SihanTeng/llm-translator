@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(translator VERSION 0.1.0 LANGUAGES CXX)
+project(translator VERSION 0.1.2 LANGUAGES CXX)
+
+# Version embedded in the app; the release workflow overrides it from the tag
+# (-DTRANSLATOR_VERSION=1.2.3) so artifacts never carry a stale version.
+set(TRANSLATOR_VERSION "${PROJECT_VERSION}" CACHE STRING "Version embedded in the app")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,12 +22,17 @@ qt_add_executable(translator
     src/DeepSeekClient.cpp
     src/PopupWindow.cpp
     src/SettingsDialog.cpp
+    src/Updater.cpp
 )
 
 target_link_libraries(translator PRIVATE
     Qt6::Widgets
     Qt6::Network
     Qt6::DBus
+)
+
+target_compile_definitions(translator PRIVATE
+    TRANSLATOR_VERSION="${TRANSLATOR_VERSION}"
 )
 
 # Optional KDE/wlroots popup placement via wlr-layer-shell (LayerShellQt).
@@ -53,12 +62,12 @@ install(FILES packaging/translator.png
         RENAME translator.png)
 
 set(CPACK_PACKAGE_NAME translator)
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_VERSION ${TRANSLATOR_VERSION})
 set(CPACK_PACKAGE_CONTACT "translator maintainers")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Select-text popup translator (LLM-powered)")
 set(CPACK_PACKAGE_DESCRIPTION "Highlight text anywhere to get a Translate bar; click it to stream an LLM translation or a dictionary explanation into a popup. GNOME Wayland (Shell extension) and X11 supported.")
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Text")
 set(CPACK_RPM_PACKAGE_REQUIRES "qt6-qtbase >= 6.11")
-set(CPACK_RPM_FILE_NAME "translator-${PROJECT_VERSION}-1.fc44.x86_64.rpm")
+set(CPACK_RPM_FILE_NAME "translator-${TRANSLATOR_VERSION}-1.fc44.x86_64.rpm")
 set(CPACK_GENERATOR "RPM")
 include(CPack)

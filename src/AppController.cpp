@@ -4,16 +4,20 @@
 #include "DeepSeekClient.h"
 #include "PopupWindow.h"
 #include "SelectionMonitor.h"
+#include "Updater.h"
 
 #include <QApplication>
 #include <QCursor>
 #include <QDBusConnection>
+#include <QDesktopServices>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPalette>
 #include <QPixmap>
+#include <QProgressDialog>
 #include <QRegularExpression>
 #include <QSystemTrayIcon>
 #include <QTextDocument>
@@ -96,6 +100,62 @@ AppController::AppController(QObject *parent)
     // First run: no key anywhere -> open settings so the user can paste one.
     if (m_settings.effectiveApiKey().isEmpty())
         openSettings();
+
+    // OTA: one quiet check shortly after startup (opt-out in Settings).
+    m_updater = new Updater(this);
+    connect(m_updater, &Updater::updateAvailable, this,
+        [this](const QString &version, const QString &url) {
+            if (!Updater::isAppImage()) {
+                QMessageBox::information(nullptr, tr("Update available"),
+                    tr("Version %1 is available (you have %2).\n"
+                       "Update via your package manager or the releases page.")
+                        .arg(version, QStringLiteral(TRANSLATOR_VERSION)));
+                QDesktopServices::openUrl(
+                    QUrl(QStringLiteral("https://github.com/SihanTeng/llm-translator/releases")));
+                return;
+            }
+            const auto answer = QMessageBox::question(nullptr, tr("Update available"),
+                tr("Version %1 is available (you have %2). Download and install now?")
+                    .arg(version, QStringLiteral(TRANSLATOR_VERSION)));
+            if (answer != QMessageBox::Yes)
+                return;
+            m_updateProgress = new QProgressDialog(tr("Downloading update…"), tr("Cancel"), 0, 100);
+            m_updateProgress->setWindowModality(Qt::ApplicationModal);
+            m_updateProgress->setAttribute(Qt::WA_DeleteOnClose);
+            connect(m_updater, &Updater::downloadProgress, m_updateProgress,
+                [this](qint64 received, qint64 total) {
+                    if (total > 0) {
+                        m_updateProgress->setMaximum(100);
+                        m_updateProgress->setValue(static_cast<int>(received * 100 / total));
+                    }
+                });
+            connect(
+                m_updateProgress, &QProgressDialog::canceled, m_updater, &Updater::cancelDownload);
+            m_updater->downloadAndInstall(url);
+        });
+    connect(m_updater, &Updater::installed, this, [this](const QString &path) {
+        if (m_updateProgress) {
+            m_updateProgress->close();
+            m_updateProgress = nullptr;
+        }
+        QMessageBox::information(nullptr, tr("Update installed"),
+            tr("Updated to the latest version. It takes effect the next time "
+               "you start Translator (%1).")
+                .arg(path));
+    });
+    connect(m_updater, &Updater::failed, this, [this](const QString &message) {
+        if (m_updateProgress) {
+            m_updateProgress->close();
+            m_updateProgress = nullptr;
+        }
+        qWarning() << "updater:" << message;
+    });
+    if (m_settings.autoUpdate)
+        QTimer::singleShot(10000, this, &AppController::checkForUpdates);
+}
+
+void AppController::checkForUpdates() {
+    m_updater->check();
 }
 
 void AppController::TranslateSelection(const QString &text, int x, int y) {

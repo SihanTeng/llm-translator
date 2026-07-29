@@ -8,6 +8,8 @@ class ActionBar;
 class DeepSeekClient;
 class PopupWindow;
 class SelectionMonitor;
+class Updater;
+class QProgressDialog;
 class QSystemTrayIcon;
 
 // Wires everything together: selection -> action bar -> (on click) DeepSeek
@@ -63,6 +65,7 @@ private:
         const QString &text, const QString &context, const QPoint &globalPos, bool showPopup);
     void openSettings();
     void applySettings(const AppSettings &settings);
+    void checkForUpdates();
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
     [[nodiscard]] QString formatWordResult(const QString &jsonPayload) const;
     static bool isSingleWord(const QString &text);
@@ -71,6 +74,8 @@ private:
     DeepSeekClient *m_client;
     PopupWindow *m_popup;
     ActionBar *m_actionBar;
+    Updater *m_updater;
+    QProgressDialog *m_updateProgress = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     AppSettings m_settings;
     QString m_pendingText;

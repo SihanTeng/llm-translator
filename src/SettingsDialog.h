@@ -16,6 +16,7 @@ struct AppSettings {
     QString model = QStringLiteral("deepseek-v4-flash");
     QString targetLanguage = QStringLiteral("zh"); // zh | en | auto
     bool monitorEnabled = true;
+    bool autoUpdate = true;
 
     static AppSettings load();
     void save() const;
@@ -39,4 +40,5 @@ private:
     QComboBox *m_modelCombo;
     QComboBox *m_languageCombo;
     QCheckBox *m_enabledCheck;
+    QCheckBox *m_autoUpdateCheck;
 };

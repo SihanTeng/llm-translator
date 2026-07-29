@@ -21,6 +21,7 @@ AppSettings AppSettings::load() {
     s.model = store.value(u"model"_s, s.model).toString();
     s.targetLanguage = store.value(u"targetLanguage"_s, s.targetLanguage).toString();
     s.monitorEnabled = store.value(u"monitorEnabled"_s, true).toBool();
+    s.autoUpdate = store.value(u"autoUpdate"_s, true).toBool();
     return s;
 }
 
@@ -31,6 +32,7 @@ void AppSettings::save() const {
     store.setValue(u"model"_s, model);
     store.setValue(u"targetLanguage"_s, targetLanguage);
     store.setValue(u"monitorEnabled"_s, monitorEnabled);
+    store.setValue(u"autoUpdate"_s, autoUpdate);
 }
 
 QString AppSettings::effectiveApiKey() const {
@@ -44,7 +46,8 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     , m_baseUrlEdit(new QLineEdit(this))
     , m_modelCombo(new QComboBox(this))
     , m_languageCombo(new QComboBox(this))
-    , m_enabledCheck(new QCheckBox(tr("Translate automatically when text is selected"), this)) {
+    , m_enabledCheck(new QCheckBox(tr("Translate automatically when text is selected"), this))
+    , m_autoUpdateCheck(new QCheckBox(tr("Automatically check for updates"), this)) {
     setWindowTitle(tr("Translator Settings"));
     setWindowIcon(QIcon::fromTheme(QStringLiteral("emblem-system")));
     setMinimumWidth(420);
@@ -108,6 +111,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     form->addRow(tr("Model:"), m_modelCombo);
     form->addRow(tr("Translate to:"), m_languageCombo);
     form->addRow(QString(), m_enabledCheck);
+    form->addRow(QString(), m_autoUpdateCheck);
     form->addRow(envNote);
     form->addRow(buttons);
 }
@@ -121,6 +125,7 @@ void SettingsDialog::setSettings(const AppSettings &settings) {
         langIndex = m_languageCombo->findData(u"zh"_s);
     m_languageCombo->setCurrentIndex(langIndex >= 0 ? langIndex : 0);
     m_enabledCheck->setChecked(settings.monitorEnabled);
+    m_autoUpdateCheck->setChecked(settings.autoUpdate);
 }
 
 AppSettings SettingsDialog::settings() const {
@@ -136,5 +141,6 @@ AppSettings SettingsDialog::settings() const {
         s.model = u"deepseek-v4-flash"_s;
     s.targetLanguage = m_languageCombo->currentData().toString();
     s.monitorEnabled = m_enabledCheck->isChecked();
+    s.autoUpdate = m_autoUpdateCheck->isChecked();
     return s;
 }

@@ -26,7 +26,8 @@ jobs:
 
       - name: Build
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DTRANSLATOR_VERSION="${GITHUB_REF_NAME#v}"
           cmake --build build
 
       - name: Build RPM package
