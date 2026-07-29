@@ -29,7 +29,26 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
-      - name: Package
+      - name: Build RPM package
+        run: |
+          sudo apt-get install -y rpm
+          cd build && cpack -G RPM && mv translator-*.rpm ../
+
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x *.AppImage
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+              --appdir AppDir \
+              -e build/translator \
+              -d packaging/translator.desktop \
+              -i packaging/translator.png \
+              --plugin qt --output appimage
+          mv translator-*.AppImage translator-x86_64.AppImage
+
+      - name: Package source tarball
         run: |
           mkdir -p dist/translator
           cp build/translator dist/translator/
@@ -40,5 +59,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: translator-linux-x86_64.tar.gz
+          files: |
+            translator-linux-x86_64.tar.gz
+            translator-x86_64.AppImage
+            translator-*.rpm
           generate_release_notes: true

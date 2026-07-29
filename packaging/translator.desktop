@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Translator
+Comment=Select-text popup translator
+Exec=translator
+Icon=translator
+Categories=Utility;
+Keywords=translate;translation;selection;dictionary;
