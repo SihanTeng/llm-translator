@@ -135,6 +135,9 @@ else:
     content = word_req["messages"][-1]["content"]
     if "Text: bank" not in content or "Sentence: We sat on the bank" not in content:
         failures.append(f"word request lacks Text:/Sentence: context: {content!r}")
+    system = word_req["messages"][0]["content"]
+    if "Simplified Chinese" not in system:
+        failures.append(f"system prompt does not name the target language: {system[:120]!r}")
 
 # --- D-Bus signals ----------------------------------------------------------
 with open(f"{work}/signals.log", errors="replace") as f:

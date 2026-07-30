@@ -3,6 +3,7 @@
 
 #include "../src/SettingsDialog.h"
 
+#include <QSettings>
 #include <QtTest>
 
 // Must run before main(): QSettings' UserScope follows XDG_CONFIG_HOME, and
@@ -22,6 +23,7 @@ class TestAppSettings : public QObject {
 private slots:
     void defaults();
     void roundtrip();
+    void legacyZhMigratesToZhCn();
     void envKeyOverrides();
     void cleanupTestCase();
 };
@@ -30,7 +32,7 @@ void TestAppSettings::defaults() {
     const AppSettings s = AppSettings::load();
     QCOMPARE(s.baseUrl, QStringLiteral("https://api.deepseek.com"));
     QCOMPARE(s.model, QStringLiteral("deepseek-v4-flash"));
-    QCOMPARE(s.targetLanguage, QStringLiteral("zh"));
+    QCOMPARE(s.targetLanguage, QStringLiteral("zh-CN"));
     QVERIFY(s.excludedApps.isEmpty());
     QVERIFY(s.autoUpdate);
     QVERIFY(s.apiKey.isEmpty());
@@ -53,6 +55,16 @@ void TestAppSettings::roundtrip() {
     QCOMPARE(loaded.targetLanguage, s.targetLanguage);
     QCOMPARE(loaded.excludedApps, s.excludedApps);
     QCOMPARE(loaded.autoUpdate, s.autoUpdate);
+}
+
+void TestAppSettings::legacyZhMigratesToZhCn() {
+    // Configs written before the multi-language list store "zh"; load()
+    // must normalize it to "zh-CN" so the combo and prompts keep working.
+    {
+        QSettings store(QStringLiteral("translator"), QStringLiteral("translator"));
+        store.setValue(QStringLiteral("targetLanguage"), QStringLiteral("zh"));
+    }
+    QCOMPARE(AppSettings::load().targetLanguage, QStringLiteral("zh-CN"));
 }
 
 void TestAppSettings::envKeyOverrides() {

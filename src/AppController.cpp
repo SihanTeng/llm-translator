@@ -4,6 +4,7 @@
 #include "DeepSeekClient.h"
 #include "HistoryDialog.h"
 #include "HistoryStore.h"
+#include "Languages.h"
 #include "PopupWindow.h"
 #include "SelectionMonitor.h"
 #include "Speaker.h"
@@ -277,16 +278,15 @@ void AppController::applySettings(const AppSettings &settings) {
 }
 
 QString AppController::buildSystemPrompt(bool jsonMode) const {
+    // "auto" (and unknown codes) keep the legacy Chinese <-> English behavior;
+    // everything else translates into the named language.
+    const QString language = languageEnglishName(m_settings.targetLanguage);
+    const bool isAuto = m_settings.targetLanguage == "auto"_L1 || language.isEmpty();
+    const QString target = isAuto
+        ? tr("if the text is Chinese, translate it into English; otherwise translate "
+             "it into Simplified Chinese")
+        : tr("translate it into %1").arg(language);
     if (jsonMode) {
-        QString target;
-        if (m_settings.targetLanguage == "zh"_L1)
-            target = tr("translate it into Simplified Chinese");
-        else if (m_settings.targetLanguage == "en"_L1)
-            target = tr("translate it into English");
-        else
-            target = tr("if the text is Chinese, translate it into English; otherwise translate "
-                        "it into Simplified Chinese");
-
         return tr("You are a translation and dictionary assistant. The user message contains a "
                   "short text after \"Text:\" and may also contain the sentence it was found in "
                   "after \"Sentence:\". First DECIDE whether the text is a single word or term "
@@ -307,14 +307,9 @@ QString AppController::buildSystemPrompt(bool jsonMode) const {
                   "context-specific senses).")
             .arg(target);
     }
-    if (m_settings.targetLanguage == "zh"_L1)
-        return tr(
-            "You are a translation engine. Translate the user's text into Simplified Chinese. "
-            "Output only the translation: no explanations, no quotes, no markup.");
-    if (m_settings.targetLanguage == "en"_L1)
-        return tr("You are a translation engine. Translate the user's text into English. "
-                  "Output only the translation: no explanations, no quotes, no markup.");
-    return tr("You are a translation engine. If the user's text is Chinese, translate it into "
-              "English; otherwise translate it into Simplified Chinese. "
-              "Output only the translation: no explanations, no quotes, no markup.");
+    return tr("You are a translation engine. %1 "
+              "Output only the translation: no explanations, no quotes, no markup.")
+        .arg(isAuto ? tr("If the user's text is Chinese, translate it into English; otherwise "
+                         "translate it into Simplified Chinese.")
+                    : tr("Translate the user's text into %1.").arg(language));
 }

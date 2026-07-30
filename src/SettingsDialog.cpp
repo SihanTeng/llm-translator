@@ -1,6 +1,7 @@
 #include "SettingsDialog.h"
 
 #include "AppPickerDialog.h"
+#include "Languages.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -38,6 +39,8 @@ AppSettings AppSettings::load() {
     s.baseUrl = store.value(u"baseUrl"_s, s.baseUrl).toString();
     s.model = store.value(u"model"_s, s.model).toString();
     s.targetLanguage = store.value(u"targetLanguage"_s, s.targetLanguage).toString();
+    if (s.targetLanguage == "zh"_L1) // legacy value from before the multi-language list
+        s.targetLanguage = "zh-CN"_L1;
     s.excludedApps = store.value(u"excludedApps"_s).toStringList();
     s.autoUpdate = store.value(u"autoUpdate"_s, true).toBool();
     return s;
@@ -106,8 +109,14 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_modelCombo->setEditable(true);
 
     m_languageCombo->addItem(tr("Auto (Chinese ↔ English)"), u"auto"_s);
-    m_languageCombo->addItem(tr("Simplified Chinese"), u"zh"_s);
-    m_languageCombo->addItem(tr("English"), u"en"_s);
+    for (const TargetLanguage &lang : targetLanguages()) {
+        const QString english = QString::fromUtf8(lang.englishName);
+        const QString nativeName = QString::fromUtf8(lang.nativeName);
+        const QString label
+            = nativeName == english ? english : u"%1 (%2)"_s.arg(english, nativeName);
+        m_languageCombo->addItem(QIcon(u":/flags/%1.png"_s.arg(QLatin1StringView(lang.flag))),
+            label, QLatin1StringView(lang.code));
+    }
 
     m_excludedAppsEdit->setPlaceholderText(tr("keepassxc, org.gnome.Terminal"));
     m_excludedAppsEdit->setToolTip(
@@ -166,7 +175,7 @@ void SettingsDialog::setSettings(const AppSettings &settings) {
     m_modelCombo->setCurrentText(settings.model);
     int langIndex = m_languageCombo->findData(settings.targetLanguage);
     if (langIndex < 0)
-        langIndex = m_languageCombo->findData(u"zh"_s);
+        langIndex = m_languageCombo->findData(u"zh-CN"_s);
     m_languageCombo->setCurrentIndex(langIndex >= 0 ? langIndex : 0);
     m_excludedAppsEdit->setText(settings.excludedApps.join(u", "_s));
     m_autoUpdateCheck->setChecked(settings.autoUpdate);

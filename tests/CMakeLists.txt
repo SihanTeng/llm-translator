@@ -53,6 +53,11 @@ add_translator_test(tst_historystore
     ../src/HistoryStore.cpp
 )
 
+add_translator_test(tst_languages
+    tst_languages.cpp
+    ../resources/translator.qrc
+)
+
 add_translator_test(tst_actionbar
     tst_actionbar.cpp
     ../src/ActionBar.cpp

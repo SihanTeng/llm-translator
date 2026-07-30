@@ -14,6 +14,10 @@ find_package(Qt6 6.11 REQUIRED COMPONENTS Widgets Network DBus)
 
 qt_standard_project_setup()
 
+# qt_standard_project_setup() does not enable AUTORCC; the flag icons are
+# embedded from resources/translator.qrc.
+set(CMAKE_AUTORCC ON)
+
 qt_add_executable(translator
     src/main.cpp
     src/AppController.cpp
@@ -28,6 +32,7 @@ qt_add_executable(translator
     src/Speaker.cpp
     src/Updater.cpp
     src/WordFormatter.cpp
+    resources/translator.qrc
 )
 
 target_link_libraries(translator PRIVATE
