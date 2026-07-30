@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Dev loop for the translator app:
-#  - src/ or CMakeLists.txt changes  -> rebuild with Ninja, restart the app
-#  - extension/ changes              -> sync to the installed GNOME Shell
+#  - clients/linux-qt/src or CMake changes  -> rebuild (incl. cargo backend), restart the app
+#  - backend/ (Rust) changes                -> same rebuild + restart
+#  - clients/linux-qt/extension/ changes    -> sync to the installed GNOME Shell
 #    extension dir; the loader there re-imports impl.js live (no relogin)
 #
 # Usage: ./dev.sh        (Ctrl+C to stop)
@@ -10,6 +11,7 @@
 set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+CLIENT="$ROOT/clients/linux-qt"
 CMAKE="$HOME/Qt/Tools/CMake/bin/cmake"
 BUILD_DIR="$ROOT/build"
 EXT_DIR="$HOME/.local/share/gnome-shell/extensions/translator@translator"
@@ -17,14 +19,14 @@ EXT_DIR="$HOME/.local/share/gnome-shell/extensions/translator@translator"
 restart() {
     pkill -x translator 2>/dev/null
     sleep 0.3
-    setsid "$BUILD_DIR/translator" > /tmp/translator_dev.log 2>&1 < /dev/null &
+    setsid "$BUILD_DIR/clients/linux-qt/translator" > /tmp/translator_dev.log 2>&1 < /dev/null &
     echo "[dev] app restarted (log: /tmp/translator_dev.log)"
 }
 
 sync_extension() {
     if [ -d "$EXT_DIR" ]; then
-        cp "$ROOT/extension/extension.js" "$ROOT/extension/impl.js" \
-           "$ROOT/extension/metadata.json" "$EXT_DIR/" && \
+        cp "$CLIENT/extension/extension.js" "$CLIENT/extension/impl.js" \
+           "$CLIENT/extension/metadata.json" "$EXT_DIR/" && \
             echo "[dev] extension synced (Shell hot-reloads impl.js)"
     fi
 }
@@ -37,7 +39,7 @@ else
 fi
 sync_extension
 
-echo "[dev] watching src/ and extension/ — edit and save to reload"
+echo "[dev] watching clients/linux-qt/src, backend/, extension/ — edit and save to reload"
 while read -r dir _events _file; do
     sleep 0.5  # debounce: let the editor finish writing
     case "$dir" in
@@ -54,4 +56,6 @@ while read -r dir _events _file; do
             ;;
     esac
 done < <(inotifywait -m -r -e modify,create,delete,move \
-        --format '%w %e %f' "$ROOT/src" "$ROOT/extension" "$ROOT/CMakeLists.txt" 2>/dev/null)
+        --format '%w %e %f' "$CLIENT/src" "$CLIENT/extension" "$ROOT/backend/src" \
+        "$ROOT/backend/Cargo.toml" "$ROOT/spec" "$ROOT/CMakeLists.txt" \
+        "$CLIENT/CMakeLists.txt" 2>/dev/null)

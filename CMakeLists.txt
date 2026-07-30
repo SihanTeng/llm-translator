@@ -10,82 +10,53 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Widgets Network DBus)
+# ---- Rust backend -----------------------------------------------------------
+# The shared backend (providers, LLM streaming clients, prompts, history) is
+# a Rust crate in backend/, built here via cargo and exposed as the imported
+# static library `translator-backend`. Clients (clients/linux-qt today) link
+# it through backend/include/translator_backend.h.
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
 
-qt_standard_project_setup()
-
-# qt_standard_project_setup() does not enable AUTORCC; the flag icons are
-# embedded from resources/translator.qrc.
-set(CMAKE_AUTORCC ON)
-
-# Platform-neutral core: provider registry, LLM clients, prompts, word-card
-# formatting, history. Future macOS/Windows builds link the same library
-# with their own selection-capture/UI shell (see spec/integration.md).
-# NOTE: consumers must embed spec/spec.qrc themselves (Qt resources belong
-# to the final binary; the providers()/Prompts() data lives there).
-add_library(translator-core STATIC
-    core/LlmClient.cpp
-    core/Provider.cpp
-    core/Prompts.cpp
-    core/WordFormatter.cpp
-    core/HistoryStore.cpp
+set(BACKEND_TARGET_DIR ${CMAKE_BINARY_DIR}/backend-target)
+set(BACKEND_LIB ${BACKEND_TARGET_DIR}/release/libtranslator_backend.a)
+file(GLOB_RECURSE BACKEND_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/backend/src/*.rs
+    ${CMAKE_SOURCE_DIR}/backend/Cargo.toml
+    ${CMAKE_SOURCE_DIR}/backend/Cargo.lock
+    ${CMAKE_SOURCE_DIR}/spec/*.json
 )
-target_include_directories(translator-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/core)
-target_link_libraries(translator-core PUBLIC Qt6::Core Qt6::Gui Qt6::Network)
-
-qt_add_executable(translator
-    src/main.cpp
-    src/AppController.cpp
-    src/ActionBar.cpp
-    src/AppPickerDialog.cpp
-    src/SelectionMonitor.cpp
-    src/HistoryDialog.cpp
-    src/PopupWindow.cpp
-    src/SettingsDialog.cpp
-    src/Speaker.cpp
-    src/Updater.cpp
-    resources/translator.qrc
-    spec/spec.qrc
+add_custom_command(
+    OUTPUT ${BACKEND_LIB}
+    COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${BACKEND_TARGET_DIR}
+            ${CARGO_EXECUTABLE} build --release
+            --manifest-path ${CMAKE_SOURCE_DIR}/backend/Cargo.toml
+    DEPENDS ${BACKEND_SOURCES}
+    COMMENT "cargo build --release (translator-backend)"
+    VERBATIM
 )
+add_custom_target(translator-backend-cargo DEPENDS ${BACKEND_LIB})
 
-target_link_libraries(translator PRIVATE
-    translator-core
-    Qt6::Widgets
-    Qt6::Network
-    Qt6::DBus
-)
+add_library(translator-backend STATIC IMPORTED GLOBAL)
+set_target_properties(translator-backend PROPERTIES IMPORTED_LOCATION ${BACKEND_LIB})
+add_dependencies(translator-backend translator-backend-cargo)
 
-target_compile_definitions(translator PRIVATE
-    TRANSLATOR_VERSION="${TRANSLATOR_VERSION}"
-)
+# A Rust staticlib needs the platform threads/dl/m libraries on Linux.
+find_package(Threads REQUIRED)
 
-# Optional KDE/wlroots popup placement via wlr-layer-shell (LayerShellQt).
-# GNOME does not support layer-shell; the GNOME Shell extension covers it.
-# Requires LayerShellQt, e.g. 'sudo dnf install layer-shell-qt' on Fedora.
-option(TRANSLATOR_WITH_LAYERSHELL "KDE/wlroots layer-shell popup placement" OFF)
-if(TRANSLATOR_WITH_LAYERSHELL)
-    find_package(LayerShellQt REQUIRED)
-    target_sources(translator PRIVATE
-        src/LayerShellPopup.cpp
-        src/CursorPosition.cpp
-    )
-    target_link_libraries(translator PRIVATE LayerShellQt::Interface)
-    target_compile_definitions(translator PRIVATE TRANSLATOR_HAVE_LAYERSHELL)
-endif()
+# Must be top-level for ctest to work from the build root; the client adds
+# its tests under the TRANSLATOR_BUILD_TESTS option.
+enable_testing()
 
-# ---- tests ----
-option(TRANSLATOR_BUILD_TESTS "Build unit tests" ON)
-if(TRANSLATOR_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+add_subdirectory(clients/linux-qt)
 
 # ---- install + packaging (RPM via CPack) ----
 
 install(TARGETS translator RUNTIME DESTINATION bin)
-install(FILES extension/metadata.json extension/extension.js extension/impl.js
+install(FILES clients/linux-qt/extension/metadata.json
+        clients/linux-qt/extension/extension.js
+        clients/linux-qt/extension/impl.js
         DESTINATION share/translator/extension)
-install(FILES extension/install.sh
+install(FILES clients/linux-qt/extension/install.sh
         DESTINATION share/translator/extension)
 install(FILES packaging/translator.desktop DESTINATION share/applications)
 install(FILES packaging/translator.png

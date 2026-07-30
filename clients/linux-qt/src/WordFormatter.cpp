@@ -7,14 +7,6 @@
 
 using namespace Qt::StringLiterals;
 
-QString extractJsonPayload(const QString &raw) {
-    const int first = raw.indexOf(u'{');
-    const int last = raw.lastIndexOf(u'}');
-    if (first < 0 || last <= first)
-        return raw.trimmed();
-    return raw.mid(first, last - first + 1);
-}
-
 QString formatWordCardHtml(const QString &jsonPayload) {
     const QJsonDocument doc = QJsonDocument::fromJson(jsonPayload.toUtf8());
     if (!doc.isObject())

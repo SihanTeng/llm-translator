@@ -2,7 +2,7 @@
 // and every flag icon present in the embedded resources (guards against
 // typos in the flag codes). The .qrc is compiled into this test binary.
 
-#include "../core/Languages.h"
+#include "../src/Languages.h"
 
 #include <QtTest>
 

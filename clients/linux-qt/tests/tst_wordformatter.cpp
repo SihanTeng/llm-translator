@@ -1,6 +1,6 @@
 // Unit tests for formatWordCardHtml (dictionary card rendering).
 
-#include "../core/WordFormatter.h"
+#include "../src/WordFormatter.h"
 
 #include <QtTest>
 
@@ -12,8 +12,6 @@ private slots:
     void missingFields();
     void invalidJsonIsEscaped();
     void htmlInjectionIsEscaped();
-    void extractJson_data();
-    void extractJson();
 };
 
 void TestWordFormatter::fullCard() {
@@ -56,24 +54,6 @@ void TestWordFormatter::htmlInjectionIsEscaped() {
     QVERIFY(!html.contains("<script>"));
     QVERIFY(html.contains("&lt;script&gt;"));
     QVERIFY(!html.contains("<b>x</b>"));
-}
-
-void TestWordFormatter::extractJson_data() {
-    QTest::addColumn<QString>("raw");
-    QTest::addColumn<QString>("expected");
-
-    QTest::newRow("plain object") << R"({"type":"word"})" << R"({"type":"word"})";
-    QTest::newRow("code fence") << "```json\n{\"type\":\"word\"}\n```" << R"({"type":"word"})";
-    QTest::newRow("prose around") << "Here is the card: {\"type\":\"word\"} hope it helps"
-                                  << R"({"type":"word"})";
-    QTest::newRow("nested braces kept") << R"({"a":{"b":1}})" << R"({"a":{"b":1}})";
-    QTest::newRow("no braces returns trimmed") << "  no json here  " << "no json here";
-}
-
-void TestWordFormatter::extractJson() {
-    QFETCH(QString, raw);
-    QFETCH(QString, expected);
-    QCOMPARE(extractJsonPayload(raw), expected);
 }
 
 QTEST_MAIN(TestWordFormatter)

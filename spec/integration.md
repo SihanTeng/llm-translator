@@ -8,14 +8,17 @@ anyone's API key.
 
 ## Repository layout
 
-- `core/` — platform-neutral C++ (Qt, no DBus/Widgets): provider registry,
-  LLM clients, prompts, word-card formatting, history. A Qt-based client
-  (macOS/Windows) can link `translator-core` directly and write only its
-  own shell. Consumers must embed `spec/spec.qrc` in their binary.
-- `src/` — the Linux desktop shell (selection capture, popup, settings
-  UI, tray). Replace this per platform.
-- `extension/` — GNOME Shell bridge (Linux-only).
-- `spec/` — the cross-platform contract (this directory).
+- `backend/` — the shared backend as a Rust crate: provider registry, LLM
+  clients, prompts, word-card parsing, history store. Exposed to native
+  clients via the C ABI in `backend/include/translator_backend.h`; tested
+  with `cargo test`.
+- `clients/` — one directory per platform client. `clients/linux-qt/` is
+  the reference implementation (Qt Widgets shell + GNOME Shell bridge in
+  `clients/linux-qt/extension/`). Replace the shell per platform; keep the
+  backend.
+- `spec/` — the cross-platform contract (this directory). Clients that do
+  not link the Rust backend (e.g. a Chrome extension) implement against
+  these files directly.
 
 ## Two integration models
 
@@ -27,7 +30,7 @@ anyone's API key.
    owns keys, settings, and provider traffic over a local IPC channel. Use
    this when the platform restricts background selection reading or window
    placement. Our reference IPC is the D-Bus interface `org.translator.App`
-   (see `src/AppController.h`): methods `TranslateSelection`,
+   (see `clients/linux-qt/src/AppController.h`): methods `TranslateSelection`,
    `TranslateSelectionWithContext`, `SetShellUiEnabled`, `ShowSettings`,
    `SpeakText`, `GetExcludedApps`; signals `TranslationToken`,
    `TranslationWordCard`, `TranslationFinished`, `TranslationError`,
@@ -93,8 +96,7 @@ Word mode yields one JSON object:
 or `{"type": "phrase", "translation": "..."}` when the model decides the
 selection is a phrase. All fields are optional strings. Clients must
 parse leniently (strip markdown fences/prose around the object — see
-`core/WordFormatter.cpp::extractJsonPayload`) and HTML-escape every field
-before rendering.
+`backend/src/wordcard.rs`) and HTML-escape every field before rendering.
 
 ## Versioning
 

@@ -14,28 +14,40 @@ jobs:
         with:
           node-version: '22'
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - name: Install clang-format (pip build, matches local dev version)
         run: |
           pip install clang-format
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: clang-format check
-        run: clang-format --dry-run --Werror src/*.cpp src/*.h
+        run: clang-format --dry-run --Werror clients/linux-qt/src/*.cpp clients/linux-qt/src/*.h clients/linux-qt/tests/*.cpp
 
       - name: prettier check
-        run: npx --yes prettier --check extension/*.js
+        run: npx --yes prettier --check clients/linux-qt/extension/*.js
 
       - name: JS syntax check
         run: |
-          for f in extension/*.js; do
+          for f in clients/linux-qt/extension/*.js; do
             cp "$f" "/tmp/$(basename "$f" .js).mjs"
             node --check "/tmp/$(basename "$f" .js).mjs"
           done
+
+      - name: cargo fmt check
+        run: cargo fmt --manifest-path backend/Cargo.toml -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --manifest-path backend/Cargo.toml -- -D warnings
 
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Qt 6.11
         uses: jurplel/install-qt-action@v4
@@ -57,6 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Install Qt 6.11
         uses: jurplel/install-qt-action@v4
         with:
@@ -73,8 +87,11 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
+      - name: Backend tests (cargo test)
+        run: cargo test --manifest-path backend/Cargo.toml
+
       - name: Unit tests (ctest)
         run: cd build && ctest --output-on-failure
 
-      - name: E2E tests (real app + D-Bus + mock DeepSeek)
-        run: ./tests/e2e.sh
+      - name: E2E tests (real app + D-Bus + mock LLM server)
+        run: ./clients/linux-qt/tests/e2e.sh

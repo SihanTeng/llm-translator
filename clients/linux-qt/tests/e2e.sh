@@ -11,12 +11,14 @@
 #   5. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
 #   6. history.json written for successful requests only
 #
-# Usage: tests/e2e.sh [path-to-binary]   (default: build/translator)
+# Usage: clients/linux-qt/tests/e2e.sh [path-to-binary]
+#   (default: build/clients/linux-qt/translator)
 
 set -u
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-BINARY="${1:-$ROOT/build/translator}"
+CLIENT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$CLIENT_ROOT/../.." && pwd)"
+BINARY="${1:-$REPO_ROOT/build/clients/linux-qt/translator}"
 PORT="${MOCK_PORT:-8955}"
 WORK="$(mktemp -d)"
 
@@ -44,7 +46,7 @@ model=deepseek-v4-flash
 EOF
 
 MOCK_PORT="$PORT" MOCK_LOG_PATH="$WORK/requests.jsonl" \
-    python3 "$ROOT/tests/mock_deepseek_server.py" &
+    python3 "$CLIENT_ROOT/tests/mock_deepseek_server.py" &
 MOCK_PID=$!
 sleep 0.5
 

@@ -4,6 +4,7 @@
 set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+CLIENT="$ROOT/clients/linux-qt"
 fail=0
 
 CLANG_FORMAT="$(command -v clang-format || true)"
@@ -11,10 +12,10 @@ CLANG_FORMAT="$(command -v clang-format || true)"
 
 # 1. C++ formatting
 if [ -x "$CLANG_FORMAT" ]; then
-    if out=$("$CLANG_FORMAT" --dry-run --Werror "$ROOT"/src/*.cpp "$ROOT"/src/*.h 2>&1); then
+    if out=$("$CLANG_FORMAT" --dry-run --Werror "$CLIENT"/src/*.cpp "$CLIENT"/src/*.h "$CLIENT"/tests/*.cpp 2>&1); then
         echo "✓ clang-format"
     else
-        echo "✗ clang-format (run: clang-format -i src/*.cpp src/*.h)"
+        echo "✗ clang-format (run: clang-format -i clients/linux-qt/src/*.cpp clients/linux-qt/src/*.h clients/linux-qt/tests/*.cpp)"
         echo "$out" | head -10
         fail=1
     fi
@@ -23,15 +24,15 @@ else
 fi
 
 # 2. JS formatting
-if npx --yes prettier --check "$ROOT"/extension/*.js > /dev/null 2>&1; then
+if npx --yes prettier --check "$CLIENT"/extension/*.js > /dev/null 2>&1; then
     echo "✓ prettier"
 else
-    echo "✗ prettier (run: npx prettier --write extension/*.js)"
+    echo "✗ prettier (run: npx prettier --write clients/linux-qt/extension/*.js)"
     fail=1
 fi
 
 # 3. JS syntax lint
-for f in "$ROOT"/extension/*.js; do
+for f in "$CLIENT"/extension/*.js; do
     tmp="/tmp/check_$(basename "$f" .js).mjs"
     cp "$f" "$tmp"
     if ! node --check "$tmp" 2> /dev/null; then
@@ -41,7 +42,31 @@ for f in "$ROOT"/extension/*.js; do
 done
 [ "$fail" -eq 0 ] && echo "✓ node syntax"
 
-# 4. C++ typecheck = full compile
+# 4. Rust backend: fmt, clippy, tests
+if command -v cargo > /dev/null 2>&1; then
+    if cargo fmt --manifest-path "$ROOT/backend/Cargo.toml" -- --check > /dev/null 2>&1; then
+        echo "✓ cargo fmt"
+    else
+        echo "✗ cargo fmt (run: cargo fmt --manifest-path backend/Cargo.toml)"
+        fail=1
+    fi
+    if cargo clippy --manifest-path "$ROOT/backend/Cargo.toml" -- -D warnings > /tmp/translator_clippy.log 2>&1; then
+        echo "✓ cargo clippy"
+    else
+        echo "✗ cargo clippy (see /tmp/translator_clippy.log)"
+        fail=1
+    fi
+    if cargo test --manifest-path "$ROOT/backend/Cargo.toml" > /tmp/translator_cargotest.log 2>&1; then
+        echo "✓ cargo test"
+    else
+        echo "✗ cargo test (see /tmp/translator_cargotest.log)"
+        fail=1
+    fi
+else
+    echo "⚠ cargo not found, skipping Rust checks"
+fi
+
+# 5. C++ typecheck = full compile (builds the Rust backend via cargo too)
 CMAKE="$HOME/Qt/Tools/CMake/bin/cmake"
 [ -x "$CMAKE" ] || CMAKE=cmake
 if [ -d "$ROOT/build" ]; then

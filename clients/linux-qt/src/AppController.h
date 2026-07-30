@@ -5,8 +5,7 @@
 #include <QPoint>
 
 class ActionBar;
-class HistoryStore;
-class LlmClient;
+class Backend;
 class PopupWindow;
 class SelectionMonitor;
 class Speaker;
@@ -14,8 +13,10 @@ class Updater;
 class QProgressDialog;
 class QSystemTrayIcon;
 
-// Wires everything together: selection -> action bar -> (on click) LLM
-// streaming -> popup, plus the tray menu and settings lifecycle.
+// Wires everything together: selection -> action bar -> (on click) backend
+// streaming -> popup, plus the tray menu and settings lifecycle. The actual
+// provider traffic, prompts, and history live in the Rust backend (see
+// backend/); this class is pure UI-side orchestration.
 //
 // Selections arrive via two paths:
 //  - X11 sessions: SelectionMonitor watches the PRIMARY selection directly.
@@ -79,27 +80,23 @@ private:
     void openSettings();
     void openHistory();
     void applySettings(const AppSettings &settings);
-    void rebuildClient();
-    void configureClient();
+    void configureBackend();
     void checkForUpdates();
-    [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
+    [[nodiscard]] QString targetLanguageName() const;
     static bool isShortText(const QString &text);
 
     SelectionMonitor *m_monitor;
-    LlmClient *m_client = nullptr;
+    Backend *m_backend;
     PopupWindow *m_popup;
     ActionBar *m_actionBar;
     Updater *m_updater;
     Speaker *m_speaker;
-    HistoryStore *m_history;
     QProgressDialog *m_updateProgress = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     AppSettings m_settings;
     QString m_pendingText;
     QString m_pendingContext;
     QPoint m_pendingPos;
-    QString m_currentSource;
-    QString m_resultBuffer;
     bool m_shellUiEnabled = false;
     bool m_jsonMode = false;
     QString m_jsonBuffer;

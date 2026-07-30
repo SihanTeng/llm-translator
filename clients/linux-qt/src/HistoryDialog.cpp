@@ -1,11 +1,14 @@
 #include "HistoryDialog.h"
 
-#include "HistoryStore.h"
+#include "Backend.h"
 
 #include <QClipboard>
 #include <QDateTime>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLocale>
@@ -25,9 +28,9 @@ QString singleLine(QString text, int maxLength) {
 }
 } // namespace
 
-HistoryDialog::HistoryDialog(HistoryStore *store, QWidget *parent)
+HistoryDialog::HistoryDialog(Backend *backend, QWidget *parent)
     : QDialog(parent)
-    , m_store(store)
+    , m_backend(backend)
     , m_filterEdit(new QLineEdit(this))
     , m_list(new QListWidget(this))
     , m_copyButton(new QPushButton(tr("Copy translation"), this)) {
@@ -59,12 +62,12 @@ HistoryDialog::HistoryDialog(HistoryStore *store, QWidget *parent)
         [this](QListWidgetItem *) { copySelected(); });
     connect(m_copyButton, &QPushButton::clicked, this, &HistoryDialog::copySelected);
     connect(clearButton, &QPushButton::clicked, this, [this] {
-        if (m_store->count() == 0)
+        if (m_list->count() == 0)
             return;
         const auto answer = QMessageBox::question(
-            this, tr("Clear history"), tr("Delete all %1 history entries?").arg(m_store->count()));
+            this, tr("Clear history"), tr("Delete all %1 history entries?").arg(m_list->count()));
         if (answer == QMessageBox::Yes) {
-            m_store->clear();
+            m_backend->historyClear();
             rebuild();
         }
     });
@@ -76,15 +79,19 @@ HistoryDialog::HistoryDialog(HistoryStore *store, QWidget *parent)
 void HistoryDialog::rebuild() {
     const QString filter = m_filterEdit->text().trimmed();
     m_list->clear();
-    for (const HistoryEntry &entry : m_store->entries()) {
-        if (!filter.isEmpty() && !entry.source.contains(filter, Qt::CaseInsensitive)
-            && !entry.translation.contains(filter, Qt::CaseInsensitive))
+    const QJsonArray entries = QJsonDocument::fromJson(m_backend->historyJson().toUtf8()).array();
+    for (const QJsonValue &value : entries) {
+        const QJsonObject entry = value.toObject();
+        const QString source = entry["source"_L1].toString();
+        const QString translation = entry["translation"_L1].toString();
+        if (!filter.isEmpty() && !source.contains(filter, Qt::CaseInsensitive)
+            && !translation.contains(filter, Qt::CaseInsensitive))
             continue;
         auto *item = new QListWidgetItem(
-            u"%1\n→ %2"_s.arg(singleLine(entry.source, 80), singleLine(entry.translation, 120)));
-        item->setData(Qt::UserRole, entry.translation);
+            u"%1\n→ %2"_s.arg(singleLine(source, 80), singleLine(translation, 120)));
+        item->setData(Qt::UserRole, translation);
         item->setToolTip(QLocale().toString(
-            QDateTime::fromSecsSinceEpoch(entry.timestamp), QLocale::ShortFormat));
+            QDateTime::fromSecsSinceEpoch(entry["ts"_L1].toInteger()), QLocale::ShortFormat));
         m_list->addItem(item);
     }
 }

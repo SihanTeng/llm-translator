@@ -12,12 +12,13 @@ your machine to the configured provider's API endpoint.
 
 - Qt 6.11 (Widgets, Network, DBus)
 - CMake ≥ 3.21, Ninja, a C++20 compiler
+- Rust toolchain (cargo) for the backend crate
 - Wayland (GNOME ≥ 45 for the selection bridge) or X11
 
 Fedora:
 
 ```sh
-sudo dnf install -y cmake ninja-build qt6-qtbase-devel gcc-c++
+sudo dnf install -y cmake ninja-build qt6-qtbase-devel gcc-c++ cargo
 ```
 
 Or point CMake at an existing Qt SDK, e.g.:
@@ -26,8 +27,8 @@ Or point CMake at an existing Qt SDK, e.g.:
 cmake -G Ninja -B build \
     -DCMAKE_MAKE_PROGRAM="$HOME/Qt/Tools/Ninja/ninja" \
     -DCMAKE_PREFIX_PATH="$HOME/Qt/6.11.1/gcc_64"
-cmake --build build
-./build/translator
+cmake --build build   # builds the Rust backend (cargo) + the Qt app
+./build/clients/linux-qt/translator
 ```
 
 ## Wayland: install the selection bridge
@@ -38,7 +39,7 @@ extension that forwards selections to the app over D-Bus
 (`org.translator.App.TranslateSelection`):
 
 ```sh
-sh extension/install.sh
+sh clients/linux-qt/extension/install.sh
 ```
 
 On Wayland, GNOME Shell must be restarted (log out / log in) before a newly
@@ -53,8 +54,9 @@ selection directly via `QClipboard` and positions its own popup.
 - The extension renders the action bar and the translation panel **inside
   GNOME Shell**, positioned exactly at the pointer — the only way to do that
   on GNOME Wayland, which gives clients no control over window placement.
-  The Qt app stays the backend (settings, API key, streaming request) and
-  forwards tokens over D-Bus signals (`TranslationToken`, `TranslationFinished`,
+  The app stays the backend (settings, API key, streaming request — the
+  Rust crate does the actual provider traffic) and forwards tokens over
+  D-Bus signals (`TranslationToken`, `TranslationFinished`,
   `TranslationError`); the extension registers itself via `SetShellUiEnabled`.
 
 ### KDE Plasma 6 / wlroots (Sway, Hyprland, …)
@@ -67,9 +69,10 @@ sudo dnf install layer-shell-qt   # Fedora
 cmake -G Ninja -B build -DTRANSLATOR_WITH_LAYERSHELL=ON [...]
 ```
 
-This compiles `src/LayerShellPopup.cpp` (overlay-layer placement with no
-keyboard interactivity) and `src/CursorPosition.cpp` (pointer position via
-`hyprctl cursorpos` / `swaymsg -t get_seats`; X11 uses `QCursor::pos()`).
+This compiles `clients/linux-qt/src/LayerShellPopup.cpp` (overlay-layer
+placement with no keyboard interactivity) and `CursorPosition.cpp` (pointer
+position via `hyprctl cursorpos` / `swaymsg -t get_seats`; X11 uses
+`QCursor::pos()`).
 
 **Status: unverified** — LayerShellQt is unavailable on GNOME, so this module
 was written but not compiled or tested here. Verify on a KDE/wlroots session
@@ -127,37 +130,42 @@ Settings are stored in `~/.config/translator/translator.conf`.
 
 ## Development
 
-`dev.sh` runs the dev loop: rebuild + restart the app on C++ changes, and
-hot-reload the GNOME Shell extension (`extension/impl.js`) on save.
+`dev.sh` runs the dev loop: rebuild + restart the app on C++/Rust changes,
+and hot-reload the GNOME Shell extension (`clients/linux-qt/extension/impl.js`)
+on save.
 
 ### Tests
 
-Unit tests are Qt Test executables wired into CTest; the e2e script drives
-the real app over D-Bus against a mock LLM server (no display needed):
+Three layers: Rust backend tests (`cargo test`), Qt unit tests wired into
+CTest, and an e2e script driving the real app over D-Bus against a mock LLM
+server (no display needed):
 
 ```sh
+cargo test --manifest-path backend/Cargo.toml   # backend: SSE parsing, spec, history
 cmake --build build
-cd build && ctest --output-on-failure   # 7 unit suites
-cd .. && ./tests/e2e.sh                 # phrase stream, word JSON+context, 401 path
+cd build && ctest --output-on-failure           # 7 Qt suites (UI side)
+cd .. && ./clients/linux-qt/tests/e2e.sh        # stream, word card, 401, anthropic
 ```
 
-- `tests/tst_*.cpp` — semver compare, SSE delta parsing, dictionary card
-  HTML (incl. XSS escaping), selection filter, settings roundtrip
-  (isolated via `XDG_CONFIG_HOME`), history store persistence/cap/clear,
-  action bar signals.
-- `tests/e2e.sh` — real binary + `dbus-run-session` +
-  `tests/mock_deepseek_server.py` (both API styles: OpenAI-compatible and
+- `backend/src/*.rs` tests — both SSE parsers, spec/providers.json and
+  prompts validation, lenient JSON extraction, history persistence/cap/clear.
+- `clients/linux-qt/tests/tst_*.cpp` — semver compare, dictionary card HTML
+  (incl. XSS escaping), selection filter, settings roundtrip (isolated via
+  `XDG_CONFIG_HOME`), language list + flag resources, action bar signals.
+- `clients/linux-qt/tests/e2e.sh` — real binary + `dbus-run-session` +
+  `mock_deepseek_server.py` (both API styles: OpenAI-compatible and
   Anthropic `/v1/messages`); asserts request shapes (stream vs JSON mode,
   `Word:`/`Sentence:` context, provider auth headers), D-Bus signal flows,
   the `GetExcludedApps` round-trip, `SpeakText` crash-safety, and that only
   successful translations land in `history.json`.
-- `tests/selection_setter.cpp` — manual helper: owns the X11 PRIMARY
-  selection with given text for interactive testing.
+- `clients/linux-qt/tests/selection_setter.cpp` — manual helper: owns the
+  X11 PRIMARY selection with given text for interactive testing.
 - `TRANSLATOR_SETTINGS_DIR` env var isolates app settings and data from the
   real `~/.config` / `~/.local/share` (used by the e2e script).
 
 Pre-commit runs `scripts/check.sh` (clang-format, prettier, node --check,
-full build); CI mirrors it and adds the test jobs on every push.
+cargo fmt/clippy/test, full build); CI mirrors it and adds the test jobs on
+every push.
 
 ## Providers
 
@@ -172,27 +180,31 @@ full build); CI mirrors it and adds the test jobs on every push.
 | Xiaomi MiMo | `mimo-v2.5` | `MIMO_API_KEY` |
 | Custom (OpenAI-compatible) | any model / base URL | — |
 
-Architecture: the repo is split into a platform-neutral core and platform
-shells, so future native apps (macOS, Windows, mobile, Chrome extension)
-can reuse the translation logic without a server:
+Architecture: the shared backend is a **Rust crate**; platform shells link
+it. No server anywhere — keys go straight from the app to the provider.
 
-- `core/` — the `translator-core` static library (Qt, no DBus/Widgets):
-  provider registry, LLM client styles, prompts, word-card formatting,
-  history. A Qt-based client links it directly and writes only its shell.
-- `spec/` — the cross-platform contract as data: `providers.json`
-  (endpoint, API style, JSON-mode capability, models, env var, key page —
-  the single source of truth the C++ registry also parses at runtime) and
-  `prompts.json` (both system prompts). See `spec/integration.md` for how
-  to build a client.
-- `src/` — the Linux desktop shell (selection capture, popup, settings,
-  tray); `extension/` — the GNOME Shell bridge.
+- `backend/` — the `translator-backend` crate (sync `ureq` + one worker
+  thread per request; no async runtime): provider registry, both API
+  styles, streaming/SSE, prompts, word-card JSON extraction, history store.
+  Exposed to clients via a small hand-rolled C ABI
+  (`backend/include/translator_backend.h`); unit-tested with `cargo test`.
+- `clients/linux-qt/` — the Linux desktop client: Qt Widgets shell
+  (selection capture, popup, settings, tray) whose `Backend` QObject wraps
+  the C ABI with Qt signals, plus the GNOME Shell bridge (`extension/`)
+  and Qt/e2e tests. Future clients (macOS, Windows, mobile) get their own
+  directory here and link the same crate.
+- `spec/` — the cross-platform contract as data: `providers.json` and
+  `prompts.json` are the single source of truth — the Rust backend embeds
+  them at compile time, the Qt settings UI parses the same files, and a
+  non-Rust client (e.g. a Chrome extension) can implement against them
+  directly. See `spec/integration.md`.
 
-`core/LlmClient.cpp` holds the network base class plus two API styles —
-`OpenAiCompatClient` (`chat/completions`, Bearer auth, used by every
-provider except Anthropic) and `AnthropicClient` (`/v1/messages`,
-`x-api-key` + `anthropic-version`, top-level `system`,
-`content_block_delta` stream parsing). Adding a provider is one
-`spec/providers.json` entry; a new API shape is one new subclass.
+The backend implements two API styles: `openai-compatible`
+(`chat/completions`, Bearer auth, used by every provider except Anthropic)
+and `anthropic` (`/v1/messages`, `x-api-key` + `anthropic-version`,
+top-level `system`, `content_block_delta` stream parsing). Adding a
+provider is one `spec/providers.json` entry; a new API shape is a new
+style module in the crate.
 
 Dictionary (JSON) mode uses `response_format: json_object` where it's
 documented (DeepSeek, OpenAI, Grok, OpenRouter, MiMo) and prompt-only with
