@@ -38,7 +38,7 @@ struct ProviderInfo {
 };
 
 // All providers from spec/providers.json, in file order. Empty only if the
-// embedded spec is missing/corrupt (tst_providerspec guards that).
+// embedded spec is missing/corrupt (the Rust backend tests guard that).
 const QList<ProviderInfo> &providers();
 
 const ProviderInfo *providerById(const QString &id);

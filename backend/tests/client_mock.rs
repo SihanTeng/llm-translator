@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
-use translator_backend::{Backend, Sink};
+use translator_backend::{Backend, RequestTimeouts, Sink};
 
 fn temp_dir(tag: &str) -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -266,7 +266,7 @@ fn missing_api_key_message_mentions_env_var() {
 }
 
 #[test]
-fn missing_api_key_message_without_env_var() {
+fn missing_api_key_message_for_custom_provider() {
     let server = MockServer::start();
     let backend = Backend::new(temp_dir("nokeycustom"));
     backend.configure("custom", "", "some-model", &server.url());
@@ -274,9 +274,15 @@ fn missing_api_key_message_without_env_var() {
     let outcome = translate(&backend, "hello", "", "Simplified Chinese", false);
 
     assert!(!outcome.done.0);
+    // spec/providers.json gives custom the DeepSeek env var (its default
+    // model is a DeepSeek one).
     assert_eq!(
         outcome.done.1,
-        "No API key configured for Custom (OpenAI-compatible). Open Settings to add one."
+        "No API key configured for Custom (OpenAI-compatible). Open Settings to add one, or set the DEEPSEEK_API_KEY environment variable."
+    );
+    assert!(
+        server.requests().is_empty(),
+        "no request is sent without a key"
     );
 }
 
@@ -434,6 +440,56 @@ fn unknown_provider_and_unconfigured_fail_cleanly() {
     backend.configure("bogus", EXPECT_KEY, "model", "http://127.0.0.1:1");
     let outcome = translate(&backend, "hello", "", "Simplified Chinese", false);
     assert_eq!(outcome.done, (false, "Unknown provider: bogus".to_string()));
+}
+
+#[test]
+fn stalled_server_times_out_instead_of_hanging() {
+    let server = common::SilentServer::start();
+    let timeouts = RequestTimeouts {
+        connect: Duration::from_secs(1),
+        global: Duration::from_secs(2),
+    };
+    let backend = Backend::with_timeouts(temp_dir("timeout"), timeouts);
+    backend.configure("deepseek", EXPECT_KEY, "deepseek-v4-flash", &server.url());
+
+    let started = std::time::Instant::now();
+    let outcome = translate(&backend, "hello", "", "Simplified Chinese", false);
+    let elapsed = started.elapsed();
+
+    assert!(!outcome.done.0);
+    assert!(
+        outcome.done.1.starts_with("Network error: "),
+        "got: {}",
+        outcome.done.1
+    );
+    assert!(
+        elapsed >= Duration::from_millis(1800),
+        "finished before the configured timeout ({elapsed:?}) — timeout not applied?"
+    );
+    // translate()'s own 15s recv_timeout already fails the test on a hang.
+}
+
+#[test]
+fn trailing_slash_in_base_url_is_trimmed() {
+    let server = MockServer::start();
+    let backend = Backend::new(temp_dir("slash"));
+    backend.configure(
+        "custom",
+        EXPECT_KEY,
+        "some-model",
+        &format!("{}/", server.url()),
+    );
+
+    let outcome = translate(
+        &backend,
+        "Translate this sentence.",
+        "",
+        "Simplified Chinese",
+        false,
+    );
+
+    assert_eq!(outcome.done, (true, String::new()));
+    assert_eq!(server.last_request().path, "/chat/completions");
 }
 
 #[test]

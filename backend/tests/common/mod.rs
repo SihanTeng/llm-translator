@@ -129,6 +129,61 @@ impl Drop for MockServer {
     }
 }
 
+/// Accepts connections and then goes completely silent (no response bytes,
+/// sockets held open). Used to prove request timeouts fire.
+pub struct SilentServer {
+    addr: SocketAddr,
+    shutdown: Arc<AtomicBool>,
+    accept: Option<JoinHandle<()>>,
+    held: Arc<Mutex<Vec<TcpStream>>>,
+}
+
+impl SilentServer {
+    pub fn start() -> SilentServer {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind silent server");
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let held: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
+        let accept = {
+            let shutdown = Arc::clone(&shutdown);
+            let held = Arc::clone(&held);
+            std::thread::spawn(move || {
+                while !shutdown.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        // Hold the socket open; never read or write.
+                        Ok((stream, _)) => held.lock().unwrap().push(stream),
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            })
+        };
+        SilentServer {
+            addr,
+            shutdown,
+            accept: Some(accept),
+            held,
+        }
+    }
+
+    pub fn url(&self) -> String {
+        format!("http://{}", self.addr)
+    }
+}
+
+impl Drop for SilentServer {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+        if let Some(accept) = self.accept.take() {
+            let _ = accept.join();
+        }
+        self.held.lock().unwrap().clear();
+    }
+}
+
 fn handle_connection(stream: TcpStream, requests: Arc<Mutex<Vec<RecordedRequest>>>) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
     let Ok(request) = read_request(&stream) else {

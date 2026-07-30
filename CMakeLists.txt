@@ -37,7 +37,11 @@ add_custom_command(
 add_custom_target(translator-backend-cargo DEPENDS ${BACKEND_LIB})
 
 add_library(translator-backend STATIC IMPORTED GLOBAL)
-set_target_properties(translator-backend PROPERTIES IMPORTED_LOCATION ${BACKEND_LIB})
+set_target_properties(translator-backend PROPERTIES
+    IMPORTED_LOCATION ${BACKEND_LIB}
+    # A Rust staticlib needs these on Linux; clients link them transitively.
+    INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS};m"
+)
 add_dependencies(translator-backend translator-backend-cargo)
 
 # A Rust staticlib needs the platform threads/dl/m libraries on Linux.

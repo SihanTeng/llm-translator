@@ -5,7 +5,7 @@
 #
 # Covers:
 #   1. phrase translation (SSE streaming, correct request shape)
-#   2. single word + context (JSON mode, response_format, Word:/Sentence:)
+#   2. single word + context (JSON mode, response_format, Text:/Sentence:)
 #   3. auth failure (401 -> TranslationError signal)
 #   4. Anthropic provider (x-api-key auth, /v1/messages, event stream)
 #   5. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
@@ -46,7 +46,7 @@ model=deepseek-v4-flash
 EOF
 
 MOCK_PORT="$PORT" MOCK_LOG_PATH="$WORK/requests.jsonl" \
-    python3 "$CLIENT_ROOT/tests/mock_deepseek_server.py" &
+    python3 "$CLIENT_ROOT/tests/mock_llm_server.py" &
 MOCK_PID=$!
 sleep 0.5
 

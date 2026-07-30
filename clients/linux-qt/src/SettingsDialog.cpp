@@ -47,7 +47,8 @@ AppSettings AppSettings::load() {
     if (s.provider.isEmpty()) {
         // Migration from pre-provider configs: top-level apiKey/baseUrl/
         // model become the deepseek entry, or "custom" when the base URL
-        // was pointed elsewhere.
+        // was pointed elsewhere. custom honors DEEPSEEK_API_KEY as its env
+        // var (see providers.json) so the v0.2.0 override keeps working.
         const QString oldKey = store.value(u"apiKey"_s).toString();
         const QString oldBase = store.value(u"baseUrl"_s).toString();
         const QString oldModel = store.value(u"model"_s).toString();

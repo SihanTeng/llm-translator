@@ -24,4 +24,5 @@ private:
     QLineEdit *m_filterEdit;
     QListWidget *m_list;
     QPushButton *m_copyButton;
+    int m_totalEntries = 0; // unfiltered count, for the Clear confirmation
 };

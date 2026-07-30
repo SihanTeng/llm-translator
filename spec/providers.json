@@ -87,7 +87,7 @@
       "baseUrl": "",
       "defaultModel": "deepseek-v4-flash",
       "altModel": "",
-      "envVar": "",
+      "envVar": "DEEPSEEK_API_KEY",
       "keyPage": ""
     }
   ]

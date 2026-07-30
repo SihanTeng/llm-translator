@@ -1,7 +1,8 @@
-//! Lenient parsing of the word-card JSON the model returns in json_mode
-//! (mirrors `core/WordFormatter.cpp::extractJsonPayload`).
+//! Lenient parsing of the word-card JSON the model returns in json_mode.
+//! This module is the canonical JSON-payload extractor (referenced by
+//! `spec/integration.md`).
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// Strips markdown fences/prose around the payload: returns the slice from
 /// the first `{` to the last `}`. Without a brace pair, returns the trimmed
@@ -13,25 +14,41 @@ pub fn extract_json_payload(raw: &str) -> String {
     }
 }
 
+/// Accepts any JSON scalar as a string (models occasionally answer with
+/// `"pos": 5`); arrays/objects/null become `None`.
+fn lenient_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(
+        Option::<serde_json::Value>::deserialize(deserializer)?.and_then(|value| match value {
+            serde_json::Value::String(s) => Some(s),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            serde_json::Value::Bool(b) => Some(b.to_string()),
+            _ => None,
+        }),
+    )
+}
+
 /// The model's structured reply: `{"type": "word", ...}` or
-/// `{"type": "phrase", "translation": ...}`. All fields optional strings.
+/// `{"type": "phrase", "translation": ...}`. All fields optional scalars.
 #[derive(Debug, Default, Deserialize)]
 pub struct WordCard {
-    #[serde(default, rename = "type")]
+    #[serde(default, rename = "type", deserialize_with = "lenient_string")]
     pub kind: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub word: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub phonetic: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub pos: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub meaning: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub explanation: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub example: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_string")]
     pub translation: Option<String>,
 }
 
@@ -140,6 +157,20 @@ mod tests {
         let card = WordCard::parse(r#"{"type": "phrase", "translation": "你好"}"#).unwrap();
         assert!(card.is_phrase());
         assert_eq!(card.translation.as_deref(), Some("你好"));
+    }
+
+    #[test]
+    fn non_string_scalars_are_accepted() {
+        // A scalar field must not invalidate the whole card (the Qt side
+        // renders such cards fine, so history must record them too).
+        let card = WordCard::parse(
+            r#"{"type": "word", "word": "bank", "pos": 5, "meaning": true, "example": [1, 2]}"#,
+        )
+        .unwrap();
+        assert_eq!(card.pos.as_deref(), Some("5"));
+        assert_eq!(card.meaning.as_deref(), Some("true"));
+        assert_eq!(card.example, None, "non-scalars are dropped");
+        assert_eq!(card.plain_text(), "bank 5\ntrue");
     }
 
     #[test]

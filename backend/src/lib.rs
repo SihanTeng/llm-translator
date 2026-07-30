@@ -10,7 +10,7 @@ pub mod prompts;
 pub mod providers;
 pub mod wordcard;
 
-pub use client::{Backend, Sink};
+pub use client::{Backend, RequestTimeouts, Sink};
 pub use history::{HistoryEntry, HistoryStore};
 pub use providers::{provider_by_id, providers, ApiStyle, JsonMode, ProviderInfo};
 pub use wordcard::{extract_json_payload, WordCard};

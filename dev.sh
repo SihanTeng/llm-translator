@@ -13,6 +13,7 @@ set -u
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 CLIENT="$ROOT/clients/linux-qt"
 CMAKE="$HOME/Qt/Tools/CMake/bin/cmake"
+[ -x "$CMAKE" ] || CMAKE=cmake
 BUILD_DIR="$ROOT/build"
 EXT_DIR="$HOME/.local/share/gnome-shell/extensions/translator@translator"
 

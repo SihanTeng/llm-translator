@@ -151,11 +151,12 @@ cd .. && ./clients/linux-qt/tests/e2e.sh        # stream, word card, 401, anthro
   prompts validation, lenient JSON extraction, history persistence/cap/clear.
 - `clients/linux-qt/tests/tst_*.cpp` — semver compare, dictionary card HTML
   (incl. XSS escaping), selection filter, settings roundtrip (isolated via
-  `XDG_CONFIG_HOME`), language list + flag resources, action bar signals.
+  `XDG_CONFIG_HOME`), .desktop app picker parsing, language list + flag
+  resources, action bar signals.
 - `clients/linux-qt/tests/e2e.sh` — real binary + `dbus-run-session` +
-  `mock_deepseek_server.py` (both API styles: OpenAI-compatible and
+  `mock_llm_server.py` (both API styles: OpenAI-compatible and
   Anthropic `/v1/messages`); asserts request shapes (stream vs JSON mode,
-  `Word:`/`Sentence:` context, provider auth headers), D-Bus signal flows,
+  `Text:`/`Sentence:` context, provider auth headers), D-Bus signal flows,
   the `GetExcludedApps` round-trip, `SpeakText` crash-safety, and that only
   successful translations land in `history.json`.
 - `clients/linux-qt/tests/selection_setter.cpp` — manual helper: owns the
@@ -178,7 +179,7 @@ every push.
 | Grok (xAI) | `grok-4-1-fast-non-reasoning` | `XAI_API_KEY` |
 | OpenRouter | `google/gemini-2.5-flash-lite` | `OPENROUTER_API_KEY` |
 | Xiaomi MiMo | `mimo-v2.5` | `MIMO_API_KEY` |
-| Custom (OpenAI-compatible) | any model / base URL | — |
+| Custom (OpenAI-compatible) | any model / base URL | `DEEPSEEK_API_KEY` (backward compat) |
 
 Architecture: the shared backend is a **Rust crate**; platform shells link
 it. No server anywhere — keys go straight from the app to the provider.

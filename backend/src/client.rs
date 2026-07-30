@@ -11,6 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 use ureq::Agent;
 
 /// Stream callback: one UTF-8 token.
@@ -50,6 +51,27 @@ enum ConfigState {
     Ready(ClientConfig),
 }
 
+/// Timeouts applied to every outgoing request. Without them a stalled peer
+/// would park the worker thread forever, breaking the exactly-one-`on_done`
+/// guarantee. Configurable so tests can use short values.
+#[derive(Debug, Clone, Copy)]
+pub struct RequestTimeouts {
+    /// Max time to establish the connection.
+    pub connect: Duration,
+    /// End-to-end cap per request, DNS through the full response body
+    /// (a stalled stream is bounded by this).
+    pub global: Duration,
+}
+
+impl Default for RequestTimeouts {
+    fn default() -> Self {
+        Self {
+            connect: Duration::from_secs(10),
+            global: Duration::from_secs(120),
+        }
+    }
+}
+
 struct Shared {
     agent: Agent,
     config: Mutex<ConfigState>,
@@ -72,7 +94,15 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Backend {
     pub fn new(data_dir: PathBuf) -> Backend {
-        let config = Agent::config_builder().http_status_as_error(false).build();
+        Self::with_timeouts(data_dir, RequestTimeouts::default())
+    }
+
+    pub fn with_timeouts(data_dir: PathBuf, timeouts: RequestTimeouts) -> Backend {
+        let config = Agent::config_builder()
+            .http_status_as_error(false)
+            .timeout_connect(Some(timeouts.connect))
+            .timeout_global(Some(timeouts.global))
+            .build();
         Backend {
             shared: Arc::new(Shared {
                 agent: Agent::new_with_config(config),
@@ -91,20 +121,24 @@ impl Backend {
         base_url_override: &str,
     ) {
         let state = match provider_by_id(provider_id) {
-            Some(provider) => ConfigState::Ready(ClientConfig {
-                provider,
-                api_key: api_key.to_string(),
-                model: if model.is_empty() {
-                    provider.default_model.clone()
+            Some(provider) => {
+                let effective_base = if base_url_override.is_empty() {
+                    provider.base_url.as_str()
                 } else {
-                    model.to_string()
-                },
-                base_url: if base_url_override.is_empty() {
-                    provider.base_url.clone()
-                } else {
-                    base_url_override.to_string()
-                },
-            }),
+                    base_url_override
+                };
+                ConfigState::Ready(ClientConfig {
+                    provider,
+                    api_key: api_key.to_string(),
+                    model: if model.is_empty() {
+                        provider.default_model.clone()
+                    } else {
+                        model.to_string()
+                    },
+                    // A trailing slash would produce "//chat/completions".
+                    base_url: effective_base.trim_end_matches('/').to_string(),
+                })
+            }
             None => ConfigState::Invalid(format!("Unknown provider: {provider_id}")),
         };
         *lock(&self.shared.config) = state;
@@ -335,6 +369,12 @@ fn run(
         Err(err) => return sink.done(false, &format!("Network error: {err}")),
     };
 
+    // A cancel during connect/send takes effect before any body read — this
+    // is the only pre-read checkpoint for non-streamed requests.
+    if cancel.load(Ordering::SeqCst) {
+        return sink.done(false, "cancelled");
+    }
+
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let body = response.body_mut().read_to_string().unwrap_or_default();
@@ -362,8 +402,10 @@ fn run(
                 continue;
             };
             let payload = payload.trim();
+            // [DONE] terminates the stream; don't wait for the server to
+            // close the connection.
             if payload == "[DONE]" {
-                continue;
+                break;
             }
             let delta = match cfg.provider.style {
                 ApiStyle::OpenAiCompatible => parse_openai_delta(payload),
@@ -477,6 +519,34 @@ mod tests {
                 "payload: {payload}"
             );
         }
+    }
+
+    #[test]
+    fn missing_key_messages() {
+        let base = ProviderInfo {
+            id: "test".to_string(),
+            name: "TestProvider".to_string(),
+            style: ApiStyle::OpenAiCompatible,
+            json_mode: JsonMode::ResponseFormat,
+            base_url: String::new(),
+            default_model: "m".to_string(),
+            alt_model: String::new(),
+            env_var: "TEST_API_KEY".to_string(),
+            key_page: String::new(),
+            disable_thinking: false,
+        };
+        assert_eq!(
+            missing_key_message(&base),
+            "No API key configured for TestProvider. Open Settings to add one, or set the TEST_API_KEY environment variable."
+        );
+        let no_env = ProviderInfo {
+            env_var: String::new(),
+            ..base
+        };
+        assert_eq!(
+            missing_key_message(&no_env),
+            "No API key configured for TestProvider. Open Settings to add one."
+        );
     }
 
     #[test]

@@ -62,10 +62,10 @@ HistoryDialog::HistoryDialog(Backend *backend, QWidget *parent)
         [this](QListWidgetItem *) { copySelected(); });
     connect(m_copyButton, &QPushButton::clicked, this, &HistoryDialog::copySelected);
     connect(clearButton, &QPushButton::clicked, this, [this] {
-        if (m_list->count() == 0)
+        if (m_totalEntries == 0)
             return;
         const auto answer = QMessageBox::question(
-            this, tr("Clear history"), tr("Delete all %1 history entries?").arg(m_list->count()));
+            this, tr("Clear history"), tr("Delete all %1 history entries?").arg(m_totalEntries));
         if (answer == QMessageBox::Yes) {
             m_backend->historyClear();
             rebuild();
@@ -80,6 +80,7 @@ void HistoryDialog::rebuild() {
     const QString filter = m_filterEdit->text().trimmed();
     m_list->clear();
     const QJsonArray entries = QJsonDocument::fromJson(m_backend->historyJson().toUtf8()).array();
+    m_totalEntries = entries.size();
     for (const QJsonValue &value : entries) {
         const QJsonObject entry = value.toObject();
         const QString source = entry["source"_L1].toString();

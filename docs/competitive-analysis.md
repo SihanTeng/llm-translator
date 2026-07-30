@@ -4,6 +4,12 @@ Research date: 2026-07-29. Method: web research (official sites, repos, docs,
 review threads) on mature open- and closed-source apps comparable to this
 project, followed by a feature/UX comparison against our codebase.
 
+> **Status (2026-07-30):** several "table stakes we lack" items below have
+> since shipped — history (#4), TTS (#2 popup buttons), and the app
+> exclusion list (#5), plus multi-provider support (beyond the scope of
+> this doc's "LLM-only niche" framing). The remaining recommendations are
+> still open. Treat the gap list as a snapshot, not a backlog.
+
 ## TL;DR
 
 Every serious competitor has a hotkey trigger, history, TTS, popup
@@ -156,7 +162,7 @@ API, TTS, and an app exclusion list.
    `TranslateText`/`TranslateClipboard` on it.
 2. **History** — Pot (SQLite), STranslate, TTime, Bob, Saladict all persist.
    Easydict's top user requests are history/wordbook. Saladict saves the
-   context sentence with each word — we already build `Word:`/`Sentence:`
+   context sentence with each word — we already build `Text:`/`Sentence:`
    context for the LLM prompt.
 3. **TTS / pronunciation** — universal; our dictionary card shows a phonetic
    string but can't play it. Qt has QtTextToSpeech (speech-dispatcher on

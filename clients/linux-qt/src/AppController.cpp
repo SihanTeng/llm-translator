@@ -15,7 +15,6 @@
 #include <QCursor>
 #include <QDBusConnection>
 #include <QDesktopServices>
-#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>

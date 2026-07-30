@@ -14,7 +14,7 @@ struct TargetLanguage {
     const char *flag; // :/flags/<flag>.png
 };
 
-// Sorted by English name; Settings keeps "Auto" above these.
+// Sorted by English name.
 inline const QList<TargetLanguage> &targetLanguages() {
     static const QList<TargetLanguage> list {
         { "ar", "Arabic", "العربية", "sa" },

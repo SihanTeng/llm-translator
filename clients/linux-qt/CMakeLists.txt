@@ -32,9 +32,6 @@ target_link_libraries(translator PRIVATE
     Qt6::Widgets
     Qt6::Network
     Qt6::DBus
-    Threads::Threads
-    ${CMAKE_DL_LIBS}
-    m
 )
 
 target_compile_definitions(translator PRIVATE

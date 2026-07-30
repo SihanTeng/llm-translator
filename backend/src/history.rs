@@ -77,7 +77,8 @@ impl HistoryStore {
     }
 
     /// Loads lazily on first use; a missing, empty or corrupt file means an
-    /// empty list.
+    /// empty list. Malformed entries are skipped individually (a bad object
+    /// must not destroy the rest of the history on the next save).
     fn ensure_loaded(&mut self) {
         if self.loaded {
             return;
@@ -86,11 +87,24 @@ impl HistoryStore {
         let Ok(bytes) = fs::read(&self.path) else {
             return;
         };
-        let Ok(entries) = serde_json::from_slice::<Vec<HistoryEntry>>(&bytes) else {
+        let Ok(values) = serde_json::from_slice::<Vec<serde_json::Value>>(&bytes) else {
             return;
         };
-        self.entries = entries
-            .into_iter()
+        self.entries = values
+            .iter()
+            .map(|value| HistoryEntry {
+                ts: value.get("ts").and_then(|v| v.as_i64()).unwrap_or_default(),
+                source: value
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                translation: value
+                    .get("translation")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+            })
             .filter(|entry| !entry.source.is_empty() && !entry.translation.is_empty())
             .collect();
     }
@@ -224,6 +238,40 @@ mod tests {
 
         let mut reloaded = HistoryStore::new(path);
         assert!(reloaded.entries().is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn malformed_entries_are_skipped_individually() {
+        let dir = temp_dir("badentries");
+        let path = dir.join("history.json");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            &path,
+            r#"[
+                {"ts": 123, "source": "hello", "translation": "你好"},
+                42,
+                {"ts": "nope", "source": 5, "translation": true},
+                {"source": "", "translation": "dangling"},
+                {"ts": 124, "source": "world", "translation": "世界"}
+            ]"#,
+        )
+        .unwrap();
+
+        let mut store = HistoryStore::new(path.clone());
+        let entries = store.entries();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].source, "hello");
+        assert_eq!(entries[1].source, "world");
+
+        // A save after loading must not lose the surviving entries.
+        store.add("new", "新");
+        let mut reloaded = HistoryStore::new(path);
+        let entries = reloaded.entries();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[1].source, "hello");
+        assert_eq!(entries[2].source, "world");
+
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -102,5 +102,5 @@ parse leniently (strip markdown fences/prose around the object — see
 
 Both files carry a top-level `version` integer, bumped on incompatible
 changes. Additive changes (new provider, new optional field) do not bump
-it. `tests/tst_providerspec.cpp` validates the files' shape — run it after
-every spec edit.
+it. The Rust backend tests validate the files' shape — run
+`cargo test --manifest-path backend/Cargo.toml` after every spec edit.
