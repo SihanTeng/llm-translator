@@ -1,5 +1,5 @@
 // Unit tests for AppSettings persistence (isolated via XDG_CONFIG_HOME set
-// before main()) and the DEEPSEEK_API_KEY override.
+// before main()): per-provider groups, legacy migrations, env overrides.
 
 #include "../src/SettingsDialog.h"
 
@@ -24,40 +24,59 @@ private slots:
     void defaults();
     void roundtrip();
     void legacyZhMigratesToZhCn();
+    void preProviderConfigMigrates();
     void envKeyOverrides();
     void cleanupTestCase();
+
+private:
+    static void clearStore() {
+        QSettings store(QStringLiteral("translator"), QStringLiteral("translator"));
+        store.clear();
+    }
 };
 
 void TestAppSettings::defaults() {
     const AppSettings s = AppSettings::load();
-    QCOMPARE(s.baseUrl, QStringLiteral("https://api.deepseek.com"));
-    QCOMPARE(s.model, QStringLiteral("deepseek-v4-flash"));
+    QCOMPARE(s.provider, QStringLiteral("deepseek"));
     QCOMPARE(s.targetLanguage, QStringLiteral("zh-CN"));
     QVERIFY(s.excludedApps.isEmpty());
     QVERIFY(s.autoUpdate);
-    QVERIFY(s.apiKey.isEmpty());
+    const ProviderSettings entry = s.currentProviderSettings();
+    QVERIFY(entry.apiKey.isEmpty());
+    QCOMPARE(entry.model, QStringLiteral("deepseek-v4-flash"));
 }
 
 void TestAppSettings::roundtrip() {
     AppSettings s;
-    s.apiKey = QStringLiteral("sk-test-123");
-    s.baseUrl = QStringLiteral("https://example.com");
-    s.model = QStringLiteral("deepseek-v4-pro");
-    s.targetLanguage = QStringLiteral("en");
+    s.provider = QStringLiteral("anthropic");
+    s.perProvider.insert(QStringLiteral("anthropic"),
+        { QStringLiteral("sk-ant"), QStringLiteral("claude-haiku-4-5"), QString() });
+    s.perProvider.insert(QStringLiteral("openai"),
+        { QStringLiteral("sk-oai"), QStringLiteral("gpt-5.6-luna"), QString() });
+    s.perProvider.insert(QStringLiteral("custom"),
+        { QStringLiteral("sk-local"), QStringLiteral("llama3"),
+            QStringLiteral("http://host:1/v1") });
+    s.targetLanguage = QStringLiteral("ja");
     s.excludedApps = { QStringLiteral("keepassxc"), QStringLiteral("org.gnome.Terminal") };
     s.autoUpdate = false;
     s.save();
 
     const AppSettings loaded = AppSettings::load();
-    QCOMPARE(loaded.apiKey, s.apiKey);
-    QCOMPARE(loaded.baseUrl, s.baseUrl);
-    QCOMPARE(loaded.model, s.model);
+    QCOMPARE(loaded.provider, s.provider);
     QCOMPARE(loaded.targetLanguage, s.targetLanguage);
     QCOMPARE(loaded.excludedApps, s.excludedApps);
     QCOMPARE(loaded.autoUpdate, s.autoUpdate);
+    QCOMPARE(
+        loaded.perProvider.value(QStringLiteral("anthropic")).apiKey, QStringLiteral("sk-ant"));
+    QCOMPARE(
+        loaded.perProvider.value(QStringLiteral("openai")).model, QStringLiteral("gpt-5.6-luna"));
+    QCOMPARE(loaded.perProvider.value(QStringLiteral("custom")).baseUrl,
+        QStringLiteral("http://host:1/v1"));
+    QCOMPARE(loaded.currentProviderSettings().apiKey, QStringLiteral("sk-ant"));
 }
 
 void TestAppSettings::legacyZhMigratesToZhCn() {
+    clearStore();
     // Configs written before the multi-language list store "zh"; load()
     // must normalize it to "zh-CN" so the combo and prompts keep working.
     {
@@ -73,15 +92,48 @@ void TestAppSettings::legacyZhMigratesToZhCn() {
     QCOMPARE(AppSettings::load().targetLanguage, QStringLiteral("zh-CN"));
 }
 
+void TestAppSettings::preProviderConfigMigrates() {
+    clearStore();
+    // Top-level apiKey/model with the default DeepSeek base URL become the
+    // deepseek provider entry.
+    {
+        QSettings store(QStringLiteral("translator"), QStringLiteral("translator"));
+        store.setValue(QStringLiteral("apiKey"), QStringLiteral("sk-old"));
+        store.setValue(QStringLiteral("baseUrl"), QStringLiteral("https://api.deepseek.com"));
+        store.setValue(QStringLiteral("model"), QStringLiteral("deepseek-v4-pro"));
+    }
+    AppSettings loaded = AppSettings::load();
+    QCOMPARE(loaded.provider, QStringLiteral("deepseek"));
+    QCOMPARE(loaded.perProvider.value(QStringLiteral("deepseek")).apiKey, QStringLiteral("sk-old"));
+    QCOMPARE(loaded.perProvider.value(QStringLiteral("deepseek")).model,
+        QStringLiteral("deepseek-v4-pro"));
+
+    clearStore();
+    // A custom base URL migrates to the "custom" provider.
+    {
+        QSettings store(QStringLiteral("translator"), QStringLiteral("translator"));
+        store.setValue(QStringLiteral("apiKey"), QStringLiteral("sk-old"));
+        store.setValue(QStringLiteral("baseUrl"), QStringLiteral("http://127.0.0.1:8955"));
+        store.setValue(QStringLiteral("model"), QStringLiteral("my-model"));
+    }
+    loaded = AppSettings::load();
+    QCOMPARE(loaded.provider, QStringLiteral("custom"));
+    QCOMPARE(loaded.perProvider.value(QStringLiteral("custom")).baseUrl,
+        QStringLiteral("http://127.0.0.1:8955"));
+    QCOMPARE(loaded.perProvider.value(QStringLiteral("custom")).apiKey, QStringLiteral("sk-old"));
+}
+
 void TestAppSettings::envKeyOverrides() {
-    AppSettings s;
-    s.apiKey = QStringLiteral("sk-stored");
+    clearStore();
+    AppSettings s; // provider defaults to deepseek -> DEEPSEEK_API_KEY applies
+    s.perProvider.insert(
+        QStringLiteral("deepseek"), { QStringLiteral("sk-stored"), QString(), QString() });
     if (qEnvironmentVariableIsSet("DEEPSEEK_API_KEY"))
         QCOMPARE(s.effectiveApiKey(), qgetenv("DEEPSEEK_API_KEY"));
     else
         QCOMPARE(s.effectiveApiKey(), QStringLiteral("sk-stored"));
 
-    s.apiKey.clear();
+    s.perProvider[QStringLiteral("deepseek")].apiKey.clear();
     if (qEnvironmentVariableIsSet("DEEPSEEK_API_KEY"))
         QCOMPARE(s.effectiveApiKey(), qgetenv("DEEPSEEK_API_KEY"));
     else

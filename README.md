@@ -1,12 +1,12 @@
 # translator
 
 Select-text popup translator for modern Linux (Wayland and X11). Highlight
-text anywhere and a popup appears with a streaming translation, powered by an
-LLM (DeepSeek by default). The app UI is in English; the default translation
-direction is English → Simplified Chinese.
+text anywhere and a popup appears with a streaming translation, powered by
+an LLM (DeepSeek by default; OpenAI, Gemini, Anthropic, Grok, OpenRouter,
+MiMo and custom OpenAI-compatible endpoints also supported).
 
 Bring your own key — no proxy, no bundled key: your key goes straight from
-your machine to the configured API endpoint.
+your machine to the configured provider's API endpoint.
 
 ## Requirements
 
@@ -79,9 +79,12 @@ workaround, XWayland selections are still visible via the X11 path).
 
 ## Usage
 
-1. On first run the Settings dialog opens — paste your DeepSeek API key.
-   Alternatively set `DEEPSEEK_API_KEY` in the environment (it overrides the
-   stored key and is never written to disk).
+1. On first run the Settings dialog opens — pick a provider and paste your
+   API key. Each provider also honors its conventional env var
+   (`DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+   `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`,
+   `MIMO_API_KEY`), which overrides the stored key and is never written to
+   disk.
 2. Select text with the mouse — a small **Translate** icon bar appears near
    the pointer. No API call is made yet.
 3. Click the bar; the translation streams into the popup. Dismiss the
@@ -107,9 +110,12 @@ copy and clear actions; failed requests are never recorded.
 
 Settings are stored in `~/.config/translator/translator.conf`.
 
-- **Base URL** defaults to `https://api.deepseek.com` and can point at any
-  OpenAI-compatible chat-completions endpoint.
-- **Model** defaults to `deepseek-v4-flash`; `deepseek-v4-pro` is available.
+- **Provider** picks the LLM backend (see the table below). Each provider
+  keeps its own key and model; the **Get an API key →** link opens the
+  provider's key page.
+- **Model** defaults to a cheap/fast model per provider and is editable.
+- **Base URL** is only shown for the **Custom** provider (any
+  OpenAI-compatible endpoint, e.g. Ollama at `http://localhost:11434/v1`).
 - **Translate to** defaults to Simplified Chinese; two dozen mainstream
   languages are available, shown with flag icons — the LLM translates into
   any of them.
@@ -127,7 +133,7 @@ hot-reload the GNOME Shell extension (`extension/impl.js`) on save.
 ### Tests
 
 Unit tests are Qt Test executables wired into CTest; the e2e script drives
-the real app over D-Bus against a mock DeepSeek server (no display needed):
+the real app over D-Bus against a mock LLM server (no display needed):
 
 ```sh
 cmake --build build
@@ -140,9 +146,10 @@ cd .. && ./tests/e2e.sh                 # phrase stream, word JSON+context, 401 
   (isolated via `XDG_CONFIG_HOME`), history store persistence/cap/clear,
   action bar signals.
 - `tests/e2e.sh` — real binary + `dbus-run-session` +
-  `tests/mock_deepseek_server.py`; asserts request shapes (stream vs JSON
-  mode, `Word:`/`Sentence:` context), D-Bus signal flows, the
-  `GetExcludedApps` round-trip, `SpeakText` crash-safety, and that only
+  `tests/mock_deepseek_server.py` (both API styles: OpenAI-compatible and
+  Anthropic `/v1/messages`); asserts request shapes (stream vs JSON mode,
+  `Word:`/`Sentence:` context, provider auth headers), D-Bus signal flows,
+  the `GetExcludedApps` round-trip, `SpeakText` crash-safety, and that only
   successful translations land in `history.json`.
 - `tests/selection_setter.cpp` — manual helper: owns the X11 PRIMARY
   selection with given text for interactive testing.
@@ -152,11 +159,29 @@ cd .. && ./tests/e2e.sh                 # phrase stream, word JSON+context, 401 
 Pre-commit runs `scripts/check.sh` (clang-format, prettier, node --check,
 full build); CI mirrors it and adds the test jobs on every push.
 
-## Notes on the DeepSeek integration
+## Providers
 
-- Endpoint: `POST {baseUrl}/chat/completions`, `Authorization: Bearer <key>`,
-  OpenAI-compatible, streamed over SSE.
-- Thinking mode is explicitly disabled (`"thinking": {"type": "disabled"}`)
-  to keep popup latency low. Per the official docs, the legacy model names
-  `deepseek-chat` / `deepseek-reasoner` are deprecated in favor of
-  `deepseek-v4-flash` / `deepseek-v4-pro`.
+| Provider | Default model | Env var override |
+|---|---|---|
+| DeepSeek | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` |
+| OpenAI | `gpt-5.6-luna` | `OPENAI_API_KEY` |
+| Google Gemini | `gemini-3.5-flash-lite` | `GEMINI_API_KEY` |
+| Anthropic | `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
+| Grok (xAI) | `grok-4-1-fast-non-reasoning` | `XAI_API_KEY` |
+| OpenRouter | `google/gemini-2.5-flash-lite` | `OPENROUTER_API_KEY` |
+| Xiaomi MiMo | `mimo-v2.5` | `MIMO_API_KEY` |
+| Custom (OpenAI-compatible) | any model / base URL | — |
+
+Architecture: `src/Provider.h` is the data-driven registry (endpoint, API
+style, JSON-mode capability, env var, key page); `src/LlmClient.cpp` holds
+the network base class plus two API styles — `OpenAiCompatClient`
+(`chat/completions`, Bearer auth, used by every provider except Anthropic)
+and `AnthropicClient` (`/v1/messages`, `x-api-key` + `anthropic-version`,
+top-level `system`, `content_block_delta` stream parsing). Adding a
+provider is one registry entry; a new API shape is one new subclass.
+
+Dictionary (JSON) mode uses `response_format: json_object` where it's
+documented (DeepSeek, OpenAI, Grok, OpenRouter, MiMo) and prompt-only with
+lenient JSON extraction elsewhere (Gemini, Anthropic). On DeepSeek,
+thinking mode stays disabled (`"thinking": {"type": "disabled"}`) to keep
+popup latency low.

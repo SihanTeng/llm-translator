@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # End-to-end test: the real app, a real D-Bus session bus, and a mock
-# DeepSeek server. No display required (offscreen platform).
+# LLM server (OpenAI-compatible + Anthropic shapes). No display required
+# (offscreen platform).
 #
 # Covers:
 #   1. phrase translation (SSE streaming, correct request shape)
 #   2. single word + context (JSON mode, response_format, Word:/Sentence:)
 #   3. auth failure (401 -> TranslationError signal)
-#   4. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
-#   5. history.json written for successful requests only
+#   4. Anthropic provider (x-api-key auth, /v1/messages, event stream)
+#   5. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
+#   6. history.json written for successful requests only
 #
 # Usage: tests/e2e.sh [path-to-binary]   (default: build/translator)
 
@@ -26,15 +28,19 @@ trap cleanup EXIT
 
 [ -x "$BINARY" ] || { echo "e2e: binary not found: $BINARY"; exit 2; }
 
+CONF="$WORK/settings/translator/translator.conf"
 mkdir -p "$WORK/settings/translator"
-cat > "$WORK/settings/translator/translator.conf" <<EOF
+cat > "$CONF" <<EOF
 [General]
+provider=deepseek
+targetLanguage=zh
+autoUpdate=false
+excludedApps=keepassxc, org.gnome.Terminal
+
+[deepseek]
 apiKey=test-key
 baseUrl=http://127.0.0.1:$PORT
 model=deepseek-v4-flash
-targetLanguage=zh
-excludedApps=keepassxc, org.gnome.Terminal
-autoUpdate=false
 EOF
 
 MOCK_PORT="$PORT" MOCK_LOG_PATH="$WORK/requests.jsonl" \
@@ -44,7 +50,7 @@ sleep 0.5
 
 export TRANSLATOR_SETTINGS_DIR="$WORK/settings"
 export QT_QPA_PLATFORM=offscreen
-export WORK BINARY
+export WORK BINARY CONF PORT
 
 timeout 90 dbus-run-session -- bash <<'INNER'
 set -u
@@ -83,13 +89,35 @@ sleep 3
 # Case 4: bad credentials -> error signal. Rewrite the key and restart so
 # the app reloads settings.
 kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
-sed -i 's/^apiKey=.*/apiKey=wrong-key/' "$TRANSLATOR_SETTINGS_DIR/translator/translator.conf"
+sed -i 's/^apiKey=.*/apiKey=wrong-key/' "$CONF"
 "$BINARY" & APP=$!
 sleep 2
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.SetShellUiEnabled true > /dev/null
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.TranslateSelectionWithContext "hello again" "" 100 100 > /dev/null
+sleep 3
+
+# Case 5: Anthropic provider (native Messages API shape against the mock).
+kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
+cat > "$CONF" <<EOF
+[General]
+provider=anthropic
+targetLanguage=zh
+autoUpdate=false
+
+[anthropic]
+apiKey=test-key
+baseUrl=http://127.0.0.1:$PORT
+model=claude-haiku-4-5
+EOF
+"$BINARY" & APP=$!
+sleep 2
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.SetShellUiEnabled true > /dev/null
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.TranslateSelectionWithContext \
+    "This sentence is long enough to stream via the anthropic path" "" 100 100 > /dev/null
 sleep 3
 
 kill "$APP" "$MON" 2>/dev/null
@@ -107,39 +135,61 @@ failures = []
 with open(f"{work}/requests.jsonl") as f:
     requests = [json.loads(line) for line in f if line.strip()]
 
-# --- request shapes ---------------------------------------------------------
-streamed = next((r for r in requests if r.get("stream") is True), None)
+# --- OpenAI-compatible request shapes (deepseek provider) --------------------
+openai_reqs = [r for r in requests if r["path"].endswith("/chat/completions")]
+streamed = next((r for r in openai_reqs if r["body"].get("stream") is True), None)
 if not streamed:
     failures.append("no streaming request received (long sentence)")
 else:
-    content = streamed["messages"][-1]["content"]
+    content = streamed["body"]["messages"][-1]["content"]
     if "lazy dog" not in content:
         failures.append(f"streaming content wrong: {content!r}")
-    if streamed.get("thinking", {}).get("type") != "disabled":
-        failures.append("thinking mode not disabled in streaming request")
-    if "response_format" in streamed:
+    if streamed["body"].get("thinking", {}).get("type") != "disabled":
+        failures.append("thinking mode not disabled in streaming request (deepseek)")
+    if "response_format" in streamed["body"]:
         failures.append("streaming request must not set response_format")
+    if streamed.get("authorization") != "Bearer test-key":
+        failures.append(f"unexpected auth header: {streamed.get('authorization')!r}")
 
-json_requests = [r for r in requests if r.get("stream") is False]
+json_requests = [r for r in openai_reqs if r["body"].get("stream") is False]
 if len(json_requests) < 2:
     failures.append(f"expected >=2 JSON-mode requests (short phrase + word), got {len(json_requests)}")
 for r in json_requests:
-    if r.get("response_format", {}).get("type") != "json_object":
+    if r["body"].get("response_format", {}).get("type") != "json_object":
         failures.append("JSON-mode request missing response_format json_object")
 
-word_req = next((r for r in json_requests if "Word: bank" in r["messages"][-1]["content"]
-                 or "Text: bank" in r["messages"][-1]["content"]), None)
+word_req = next((r for r in json_requests if "Text: bank" in r["body"]["messages"][-1]["content"]),
+                None)
 if not word_req:
     failures.append("no JSON-mode request for the word 'bank'")
 else:
-    content = word_req["messages"][-1]["content"]
+    content = word_req["body"]["messages"][-1]["content"]
     if "Text: bank" not in content or "Sentence: We sat on the bank" not in content:
         failures.append(f"word request lacks Text:/Sentence: context: {content!r}")
-    system = word_req["messages"][0]["content"]
+    system = word_req["body"]["messages"][0]["content"]
     if "Simplified Chinese" not in system:
         failures.append(f"system prompt does not name the target language: {system[:120]!r}")
 
-# --- D-Bus signals ----------------------------------------------------------
+# --- Anthropic request shape ---------------------------------------------------
+anthropic = next((r for r in requests if r["path"].endswith("/v1/messages")), None)
+if not anthropic:
+    failures.append("no Anthropic /v1/messages request received")
+else:
+    body = anthropic["body"]
+    if body.get("stream") is not True:
+        failures.append("Anthropic request must stream")
+    if "max_tokens" not in body:
+        failures.append("Anthropic request missing required max_tokens")
+    if "anthropic path" not in body["messages"][-1]["content"]:
+        failures.append(f"Anthropic user content wrong: {body['messages'][-1]['content']!r}")
+    if body["messages"][-1].get("role") != "user":
+        failures.append("Anthropic messages must only carry the user role")
+    if "Simplified Chinese" not in body.get("system", ""):
+        failures.append("Anthropic system prompt missing target language")
+    if anthropic.get("x-api-key") != "test-key":
+        failures.append(f"Anthropic auth header wrong: {anthropic.get('x-api-key')!r}")
+
+# --- D-Bus signals -------------------------------------------------------------
 with open(f"{work}/signals.log", errors="replace") as f:
     signals = f.read()
 
@@ -150,18 +200,20 @@ if "the land next to a river" not in signals:
     failures.append("word card JSON did not reach the bus")
 if "这是一个模拟翻译" not in signals:
     failures.append("phrase translation (mock) did not reach the bus")
+if '"Hola"' not in signals:
+    failures.append("Anthropic stream tokens did not reach the bus")
 if "TranslationError" not in signals:
     failures.append("expected TranslationError for the bad-key case")
 if "unauthorized" not in signals and "401" not in signals:
     failures.append("error signal did not carry the 401 detail")
 
-# --- app exclusion list -------------------------------------------------------
+# --- app exclusion list ----------------------------------------------------------
 with open(f"{work}/excluded.txt") as f:
     excluded = f.read()
 if "keepassxc" not in excluded:
     failures.append(f"GetExcludedApps did not return the configured list: {excluded!r}")
 
-# --- history ------------------------------------------------------------------
+# --- history ---------------------------------------------------------------------
 try:
     with open(f"{work}/settings/translator/translator/history.json") as f:
         history = json.load(f)
@@ -176,6 +228,8 @@ if not any("lazy dog" in s for s in sources):
     failures.append(f"streamed translation not recorded in history: {sources!r}")
 if not any(s == "bank" for s in sources):
     failures.append(f"word card not recorded in history: {sources!r}")
+if not any("anthropic path" in s for s in sources):
+    failures.append("Anthropic translation not recorded in history")
 if any("hello again" in s for s in sources):
     failures.append("failed (401) request must not be recorded in history")
 
@@ -184,5 +238,5 @@ if failures:
     for failure in failures:
         print(" -", failure)
     sys.exit(1)
-print("e2e: all cases pass (long stream, short phrase JSON, word card+context, 401 path)")
+print("e2e: all cases pass (stream, phrase JSON, word card+context, 401, anthropic, exclusions, history)")
 EOF

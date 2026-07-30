@@ -24,7 +24,7 @@ qt_add_executable(translator
     src/ActionBar.cpp
     src/AppPickerDialog.cpp
     src/SelectionMonitor.cpp
-    src/DeepSeekClient.cpp
+    src/LlmClient.cpp
     src/HistoryDialog.cpp
     src/HistoryStore.cpp
     src/PopupWindow.cpp

@@ -24,7 +24,7 @@ add_translator_test(tst_isnewer
 
 add_translator_test(tst_sseparsing
     tst_sseparsing.cpp
-    ../src/DeepSeekClient.cpp
+    ../src/LlmClient.cpp
 )
 
 add_translator_test(tst_wordformatter

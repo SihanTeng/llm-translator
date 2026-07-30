@@ -1,11 +1,12 @@
 #include "AppController.h"
 
 #include "ActionBar.h"
-#include "DeepSeekClient.h"
 #include "HistoryDialog.h"
 #include "HistoryStore.h"
 #include "Languages.h"
+#include "LlmClient.h"
 #include "PopupWindow.h"
+#include "Provider.h"
 #include "SelectionMonitor.h"
 #include "Speaker.h"
 #include "Updater.h"
@@ -32,12 +33,11 @@ using namespace Qt::StringLiterals;
 AppController::AppController(QObject *parent)
     : QObject(parent)
     , m_monitor(new SelectionMonitor(this))
-    , m_client(new DeepSeekClient(this))
     , m_popup(new PopupWindow)
     , m_actionBar(new ActionBar)
     , m_speaker(new Speaker(this))
     , m_history(new HistoryStore(this)) {
-    applySettings(AppSettings::load());
+    applySettings(AppSettings::load()); // creates and configures the LLM client
 
     connect(m_monitor, &SelectionMonitor::selectionReady, this, &AppController::onSelection);
     connect(m_monitor, &SelectionMonitor::selectionCleared, m_actionBar, &QWidget::hide);
@@ -47,51 +47,6 @@ AppController::AppController(QObject *parent)
     connect(m_popup, &PopupWindow::speakRequested, m_speaker, &Speaker::speak);
     // Allow re-selecting the same text after the bar was dismissed.
     connect(m_actionBar, &ActionBar::dismissed, m_monitor, &SelectionMonitor::resetLastEmitted);
-
-    // Short selections go through JSON mode (the model decides word vs
-    // phrase); the raw JSON is buffered and rendered at the end.
-    connect(m_client, &DeepSeekClient::tokenReceived, this, [this](const QString &delta) {
-        if (m_jsonMode) {
-            m_jsonBuffer += delta;
-            return;
-        }
-        m_resultBuffer += delta;
-        m_popup->appendToken(delta);
-        emit TranslationToken(delta);
-    });
-    connect(m_client, &DeepSeekClient::requestFinished, this, [this] {
-        if (m_jsonMode) {
-            const QJsonObject obj = QJsonDocument::fromJson(m_jsonBuffer.toUtf8()).object();
-            if (obj["type"_L1].toString() == "phrase"_L1
-                && !obj["translation"_L1].toString().isEmpty()) {
-                // The model classified the selection as a phrase: show the
-                // translation as plain text.
-                const QString translation = obj["translation"_L1].toString();
-                m_popup->setResult(translation.toHtmlEscaped());
-                emit TranslationToken(translation);
-                m_history->add(m_currentSource, translation);
-            } else {
-                const QString html = formatWordCardHtml(m_jsonBuffer);
-                m_popup->setResult(html);
-                // The Shell extension renders its own structured card from
-                // the raw JSON (St widgets cannot render HTML).
-                emit TranslationWordCard(m_jsonBuffer);
-                // Plain-text form for older extension versions.
-                QTextDocument doc;
-                doc.setHtml(html);
-                const QString plain = doc.toPlainText().trimmed();
-                emit TranslationToken(plain);
-                m_history->add(m_currentSource, plain);
-            }
-        } else {
-            m_history->add(m_currentSource, m_resultBuffer);
-        }
-        emit TranslationFinished();
-    });
-    connect(m_client, &DeepSeekClient::errorOccurred, this, [this](const QString &message) {
-        m_popup->showError(message);
-        emit TranslationError(message);
-    });
 
     // D-Bus entry point for the GNOME Shell extension (Wayland sessions).
     QDBusConnection bus = QDBusConnection::sessionBus();
@@ -269,12 +224,83 @@ void AppController::openHistory() {
 }
 
 void AppController::applySettings(const AppSettings &settings) {
+    const bool providerChanged = settings.provider != m_settings.provider;
     m_settings = settings;
     m_settings.save();
-    m_client->setApiKey(m_settings.effectiveApiKey());
-    m_client->setBaseUrl(m_settings.baseUrl);
-    m_client->setModel(m_settings.model);
+    if (!m_client || providerChanged)
+        rebuildClient();
+    else
+        configureClient();
     emit ExcludedAppsChanged(m_settings.excludedApps);
+}
+
+void AppController::configureClient() {
+    const ProviderInfo *info = providerById(m_settings.provider);
+    if (!info)
+        info = providerById(QStringLiteral("deepseek"));
+    const ProviderSettings entry = m_settings.currentProviderSettings();
+    // entry.baseUrl is empty unless overridden (Settings exposes it only
+    // for the "custom" provider); configure() falls back to the default.
+    m_client->configure(*info, m_settings.effectiveApiKey(), entry.model, entry.baseUrl);
+}
+
+void AppController::rebuildClient() {
+    const ProviderInfo *info = providerById(m_settings.provider);
+    if (!info) // corrupt/corner-case id: fall back to DeepSeek-compatible
+        info = providerById(QStringLiteral("deepseek"));
+    if (m_client)
+        m_client->deleteLater();
+    m_client = LlmClient::create(*info, this);
+
+    // Short selections go through JSON mode (the model decides word vs
+    // phrase); the raw JSON is buffered and rendered at the end.
+    connect(m_client, &LlmClient::tokenReceived, this, [this](const QString &delta) {
+        if (m_jsonMode) {
+            m_jsonBuffer += delta;
+            return;
+        }
+        m_resultBuffer += delta;
+        m_popup->appendToken(delta);
+        emit TranslationToken(delta);
+    });
+    connect(m_client, &LlmClient::requestFinished, this, [this] {
+        if (m_jsonMode) {
+            // Providers without response_format may wrap the JSON in prose
+            // or code fences — extract it leniently.
+            const QString json = extractJsonPayload(m_jsonBuffer);
+            const QJsonObject obj = QJsonDocument::fromJson(json.toUtf8()).object();
+            if (obj["type"_L1].toString() == "phrase"_L1
+                && !obj["translation"_L1].toString().isEmpty()) {
+                // The model classified the selection as a phrase: show the
+                // translation as plain text.
+                const QString translation = obj["translation"_L1].toString();
+                m_popup->setResult(translation.toHtmlEscaped());
+                emit TranslationToken(translation);
+                m_history->add(m_currentSource, translation);
+            } else {
+                const QString html = formatWordCardHtml(json);
+                m_popup->setResult(html);
+                // The Shell extension renders its own structured card from
+                // the raw JSON (St widgets cannot render HTML).
+                emit TranslationWordCard(json);
+                // Plain-text form for older extension versions.
+                QTextDocument doc;
+                doc.setHtml(html);
+                const QString plain = doc.toPlainText().trimmed();
+                emit TranslationToken(plain);
+                m_history->add(m_currentSource, plain);
+            }
+        } else {
+            m_history->add(m_currentSource, m_resultBuffer);
+        }
+        emit TranslationFinished();
+    });
+    connect(m_client, &LlmClient::errorOccurred, this, [this](const QString &message) {
+        m_popup->showError(message);
+        emit TranslationError(message);
+    });
+
+    configureClient();
 }
 
 QString AppController::buildSystemPrompt(bool jsonMode) const {

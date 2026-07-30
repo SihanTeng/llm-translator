@@ -5,8 +5,8 @@
 #include <QPoint>
 
 class ActionBar;
-class DeepSeekClient;
 class HistoryStore;
+class LlmClient;
 class PopupWindow;
 class SelectionMonitor;
 class Speaker;
@@ -14,7 +14,7 @@ class Updater;
 class QProgressDialog;
 class QSystemTrayIcon;
 
-// Wires everything together: selection -> action bar -> (on click) DeepSeek
+// Wires everything together: selection -> action bar -> (on click) LLM
 // streaming -> popup, plus the tray menu and settings lifecycle.
 //
 // Selections arrive via two paths:
@@ -79,12 +79,14 @@ private:
     void openSettings();
     void openHistory();
     void applySettings(const AppSettings &settings);
+    void rebuildClient();
+    void configureClient();
     void checkForUpdates();
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
     static bool isShortText(const QString &text);
 
     SelectionMonitor *m_monitor;
-    DeepSeekClient *m_client;
+    LlmClient *m_client = nullptr;
     PopupWindow *m_popup;
     ActionBar *m_actionBar;
     Updater *m_updater;
