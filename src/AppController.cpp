@@ -278,14 +278,11 @@ void AppController::applySettings(const AppSettings &settings) {
 }
 
 QString AppController::buildSystemPrompt(bool jsonMode) const {
-    // "auto" (and unknown codes) keep the legacy Chinese <-> English behavior;
-    // everything else translates into the named language.
-    const QString language = languageEnglishName(m_settings.targetLanguage);
-    const bool isAuto = m_settings.targetLanguage == "auto"_L1 || language.isEmpty();
-    const QString target = isAuto
-        ? tr("if the text is Chinese, translate it into English; otherwise translate "
-             "it into Simplified Chinese")
-        : tr("translate it into %1").arg(language);
+    // Unknown/corrupt codes fall back to Simplified Chinese.
+    QString language = languageEnglishName(m_settings.targetLanguage);
+    if (language.isEmpty())
+        language = QStringLiteral("Simplified Chinese");
+    const QString target = tr("translate it into %1").arg(language);
     if (jsonMode) {
         return tr("You are a translation and dictionary assistant. The user message contains a "
                   "short text after \"Text:\" and may also contain the sentence it was found in "
@@ -307,9 +304,7 @@ QString AppController::buildSystemPrompt(bool jsonMode) const {
                   "context-specific senses).")
             .arg(target);
     }
-    return tr("You are a translation engine. %1 "
+    return tr("You are a translation engine. Translate the user's text into %1. "
               "Output only the translation: no explanations, no quotes, no markup.")
-        .arg(isAuto ? tr("If the user's text is Chinese, translate it into English; otherwise "
-                         "translate it into Simplified Chinese.")
-                    : tr("Translate the user's text into %1.").arg(language));
+        .arg(language);
 }

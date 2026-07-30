@@ -15,7 +15,7 @@ struct AppSettings {
     QString apiKey;
     QString baseUrl = QStringLiteral("https://api.deepseek.com");
     QString model = QStringLiteral("deepseek-v4-flash");
-    QString targetLanguage = QStringLiteral("zh-CN"); // auto | <language code, see Languages.h>
+    QString targetLanguage = QStringLiteral("zh-CN"); // language code, see Languages.h
     // WM_CLASS names that should never trigger the Translate bar (GNOME
     // Wayland only — X11 selections carry no source-app information).
     QStringList excludedApps;

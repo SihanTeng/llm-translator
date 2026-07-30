@@ -65,6 +65,12 @@ void TestAppSettings::legacyZhMigratesToZhCn() {
         store.setValue(QStringLiteral("targetLanguage"), QStringLiteral("zh"));
     }
     QCOMPARE(AppSettings::load().targetLanguage, QStringLiteral("zh-CN"));
+    // The removed "auto" option migrates the same way.
+    {
+        QSettings store(QStringLiteral("translator"), QStringLiteral("translator"));
+        store.setValue(QStringLiteral("targetLanguage"), QStringLiteral("auto"));
+    }
+    QCOMPARE(AppSettings::load().targetLanguage, QStringLiteral("zh-CN"));
 }
 
 void TestAppSettings::envKeyOverrides() {

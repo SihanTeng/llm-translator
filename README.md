@@ -110,9 +110,9 @@ Settings are stored in `~/.config/translator/translator.conf`.
 - **Base URL** defaults to `https://api.deepseek.com` and can point at any
   OpenAI-compatible chat-completions endpoint.
 - **Model** defaults to `deepseek-v4-flash`; `deepseek-v4-pro` is available.
-- **Translate to** defaults to Simplified Chinese. Auto (Chinese ↔ English)
-  plus two dozen mainstream languages are available, shown with flag
-  icons — the LLM translates into any of them.
+- **Translate to** defaults to Simplified Chinese; two dozen mainstream
+  languages are available, shown with flag icons — the LLM translates into
+  any of them.
 - **Exclude apps** is a list of window classes (WM_CLASS); selections in
   those apps never show the Translate bar — useful for password managers.
   Click **Choose…** to pick from your installed apps instead of typing class

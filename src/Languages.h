@@ -46,7 +46,7 @@ inline const QList<TargetLanguage> &targetLanguages() {
 }
 
 // English name for a language code ("zh-CN" -> "Simplified Chinese"), or
-// empty when the code is unknown (callers fall back to auto behavior).
+// empty when the code is unknown (callers fall back to Simplified Chinese).
 inline QString languageEnglishName(const QString &code) {
     for (const TargetLanguage &lang : targetLanguages()) {
         if (code == QLatin1StringView(lang.code))

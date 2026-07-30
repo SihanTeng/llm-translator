@@ -39,7 +39,8 @@ AppSettings AppSettings::load() {
     s.baseUrl = store.value(u"baseUrl"_s, s.baseUrl).toString();
     s.model = store.value(u"model"_s, s.model).toString();
     s.targetLanguage = store.value(u"targetLanguage"_s, s.targetLanguage).toString();
-    if (s.targetLanguage == "zh"_L1) // legacy value from before the multi-language list
+    // Legacy values: "zh" predates the multi-language list, "auto" was removed.
+    if (s.targetLanguage == "zh"_L1 || s.targetLanguage == "auto"_L1)
         s.targetLanguage = "zh-CN"_L1;
     s.excludedApps = store.value(u"excludedApps"_s).toStringList();
     s.autoUpdate = store.value(u"autoUpdate"_s, true).toBool();
@@ -108,7 +109,6 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_modelCombo->addItem(u"deepseek-v4-pro"_s);
     m_modelCombo->setEditable(true);
 
-    m_languageCombo->addItem(tr("Auto (Chinese ↔ English)"), u"auto"_s);
     for (const TargetLanguage &lang : targetLanguages()) {
         const QString english = QString::fromUtf8(lang.englishName);
         const QString nativeName = QString::fromUtf8(lang.nativeName);
