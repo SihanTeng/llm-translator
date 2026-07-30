@@ -172,13 +172,27 @@ full build); CI mirrors it and adds the test jobs on every push.
 | Xiaomi MiMo | `mimo-v2.5` | `MIMO_API_KEY` |
 | Custom (OpenAI-compatible) | any model / base URL | — |
 
-Architecture: `src/Provider.h` is the data-driven registry (endpoint, API
-style, JSON-mode capability, env var, key page); `src/LlmClient.cpp` holds
-the network base class plus two API styles — `OpenAiCompatClient`
-(`chat/completions`, Bearer auth, used by every provider except Anthropic)
-and `AnthropicClient` (`/v1/messages`, `x-api-key` + `anthropic-version`,
-top-level `system`, `content_block_delta` stream parsing). Adding a
-provider is one registry entry; a new API shape is one new subclass.
+Architecture: the repo is split into a platform-neutral core and platform
+shells, so future native apps (macOS, Windows, mobile, Chrome extension)
+can reuse the translation logic without a server:
+
+- `core/` — the `translator-core` static library (Qt, no DBus/Widgets):
+  provider registry, LLM client styles, prompts, word-card formatting,
+  history. A Qt-based client links it directly and writes only its shell.
+- `spec/` — the cross-platform contract as data: `providers.json`
+  (endpoint, API style, JSON-mode capability, models, env var, key page —
+  the single source of truth the C++ registry also parses at runtime) and
+  `prompts.json` (both system prompts). See `spec/integration.md` for how
+  to build a client.
+- `src/` — the Linux desktop shell (selection capture, popup, settings,
+  tray); `extension/` — the GNOME Shell bridge.
+
+`core/LlmClient.cpp` holds the network base class plus two API styles —
+`OpenAiCompatClient` (`chat/completions`, Bearer auth, used by every
+provider except Anthropic) and `AnthropicClient` (`/v1/messages`,
+`x-api-key` + `anthropic-version`, top-level `system`,
+`content_block_delta` stream parsing). Adding a provider is one
+`spec/providers.json` entry; a new API shape is one new subclass.
 
 Dictionary (JSON) mode uses `response_format: json_object` where it's
 documented (DeepSeek, OpenAI, Grok, OpenRouter, MiMo) and prompt-only with

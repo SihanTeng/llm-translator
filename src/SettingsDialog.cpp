@@ -35,7 +35,7 @@ QStringList parseExcludedApps(const QString &text) {
 
 QString defaultBaseUrl(const QString &providerId) {
     const ProviderInfo *info = providerById(providerId);
-    return info ? QString::fromUtf8(info->baseUrl) : QString();
+    return info ? info->baseUrl : QString();
 }
 } // namespace
 
@@ -65,7 +65,7 @@ AppSettings AppSettings::load() {
     }
 
     for (const ProviderInfo &info : providers()) {
-        const QString id = QString::fromUtf8(info.id);
+        const QString id = info.id;
         ProviderSettings &entry = s.perProvider[id]; // ensure every provider has an entry
         const QString group = id + u'/';
         const QString key = store.value(group + u"apiKey"_s).toString();
@@ -78,7 +78,7 @@ AppSettings AppSettings::load() {
         if (!base.isEmpty())
             entry.baseUrl = base;
         if (entry.model.isEmpty())
-            entry.model = QString::fromUtf8(info.defaultModel);
+            entry.model = info.defaultModel;
     }
 
     s.targetLanguage = store.value(u"targetLanguage"_s, s.targetLanguage).toString();
@@ -110,9 +110,8 @@ ProviderSettings AppSettings::currentProviderSettings() const {
 
 QString AppSettings::effectiveApiKey() const {
     const ProviderInfo *info = providerById(provider);
-    if (info && info->envVar[0] != '\0') {
-        const QString envKey
-            = QProcessEnvironment::systemEnvironment().value(QString::fromUtf8(info->envVar));
+    if (info && !info->envVar.isEmpty()) {
+        const QString envKey = QProcessEnvironment::systemEnvironment().value(info->envVar);
         if (!envKey.isEmpty())
             return envKey;
     }
@@ -163,7 +162,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     )"_L1);
 
     for (const ProviderInfo &info : providers()) {
-        m_providerCombo->addItem(QString::fromUtf8(info.name), QString::fromUtf8(info.id));
+        m_providerCombo->addItem(info.name, info.id);
     }
     connect(
         m_providerCombo, &QComboBox::currentIndexChanged, this, &SettingsDialog::onProviderChanged);
@@ -252,16 +251,15 @@ void SettingsDialog::loadFieldsFor(const QString &providerId) {
 
     m_apiKeyEdit->setText(draft.apiKey);
     m_apiKeyEdit->setPlaceholderText(
-        info && info->envVar[0] ? tr("or set %1").arg(QString::fromUtf8(info->envVar)) : QString());
+        info && !info->envVar.isEmpty() ? tr("or set %1").arg(info->envVar) : QString());
 
     m_modelCombo->clear();
     if (info) {
-        m_modelCombo->addItem(QString::fromUtf8(info->defaultModel));
-        if (info->altModel[0] != '\0')
-            m_modelCombo->addItem(QString::fromUtf8(info->altModel));
+        m_modelCombo->addItem(info->defaultModel);
+        if (!info->altModel.isEmpty())
+            m_modelCombo->addItem(info->altModel);
     }
-    m_modelCombo->setCurrentText(
-        draft.model.isEmpty() && info ? QString::fromUtf8(info->defaultModel) : draft.model);
+    m_modelCombo->setCurrentText(draft.model.isEmpty() && info ? info->defaultModel : draft.model);
 
     const bool isCustom = providerId == "custom"_L1;
     m_baseUrlLabel->setVisible(isCustom);
@@ -269,18 +267,18 @@ void SettingsDialog::loadFieldsFor(const QString &providerId) {
     m_baseUrlEdit->setText(draft.baseUrl);
     m_baseUrlEdit->setPlaceholderText(u"https://api.example.com/v1"_s);
 
-    const bool hasKeyPage = info && info->keyPage[0] != '\0';
+    const bool hasKeyPage = info && !info->keyPage.isEmpty();
     m_keyLink->setVisible(hasKeyPage);
     if (hasKeyPage) {
-        const QString url = QString::fromUtf8(info->keyPage);
+        const QString url = info->keyPage;
         m_keyLink->setText(u"<a href=\"%1\">%2</a>"_s.arg(url, tr("Get an API key →")));
     }
 
-    if (info && info->envVar[0] != '\0') {
+    if (info && !info->envVar.isEmpty()) {
         m_envNote->setText(
             tr("Keys are stored locally and only sent to the provider's API endpoint.\n"
                "%1 overrides the stored key.")
-                .arg(QString::fromUtf8(info->envVar)));
+                .arg(info->envVar));
     } else {
         m_envNote->setText(tr("Keys are stored locally and only sent to the configured base URL."));
     }

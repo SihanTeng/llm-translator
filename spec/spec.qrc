@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/spec">
+        <file alias="providers.json">providers.json</file>
+        <file alias="prompts.json">prompts.json</file>
+    </qresource>
+</RCC>

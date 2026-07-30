@@ -2,7 +2,7 @@
 // (OpenAI-style data chunks) and AnthropicClient::parseDelta (Messages API
 // event stream).
 
-#include "../src/LlmClient.h"
+#include "../core/LlmClient.h"
 
 #include <QtTest>
 

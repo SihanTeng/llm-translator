@@ -26,15 +26,15 @@ void LlmClient::configure(const ProviderInfo &provider, const QString &apiKey, c
     m_provider = provider;
     m_apiKey = apiKey;
     m_model = model;
-    m_baseUrl = baseUrlOverride.isEmpty() ? QString::fromUtf8(provider.baseUrl) : baseUrlOverride;
+    m_baseUrl = baseUrlOverride.isEmpty() ? provider.baseUrl : baseUrlOverride;
 }
 
 void LlmClient::translate(const QString &text, const QString &systemPrompt, bool jsonMode) {
     cancel();
 
     if (m_apiKey.isEmpty()) {
-        const QString name = QString::fromUtf8(m_provider.name);
-        const QString envVar = QString::fromUtf8(m_provider.envVar);
+        const QString name = m_provider.name;
+        const QString envVar = m_provider.envVar;
         emit errorOccurred(envVar.isEmpty()
                 ? tr("No API key configured for %1. Open Settings to add one.").arg(name)
                 : tr("No API key configured for %1. Open Settings to add one, or set the %2 "
@@ -123,11 +123,9 @@ void LlmClient::onFinished() {
         QString detail = QString::fromUtf8(reply->readAll()).trimmed();
         if (detail.size() > 300)
             detail = detail.left(300) + u"…"_s;
-        emit errorOccurred(status > 0 ? tr("%1 request failed (HTTP %2): %3")
-                                            .arg(QString::fromUtf8(m_provider.name))
-                                            .arg(status)
-                                            .arg(detail)
-                                      : tr("Network error: %1").arg(reply->errorString()));
+        emit errorOccurred(status > 0
+                ? tr("%1 request failed (HTTP %2): %3").arg(m_provider.name).arg(status).arg(detail)
+                : tr("Network error: %1").arg(reply->errorString()));
     }
 
     // For non-streamed JSON mode, readyRead() may not have consumed the

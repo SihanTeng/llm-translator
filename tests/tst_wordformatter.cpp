@@ -1,6 +1,6 @@
 // Unit tests for formatWordCardHtml (dictionary card rendering).
 
-#include "../src/WordFormatter.h"
+#include "../core/WordFormatter.h"
 
 #include <QtTest>
 

@@ -6,6 +6,7 @@
 #include "Languages.h"
 #include "LlmClient.h"
 #include "PopupWindow.h"
+#include "Prompts.h"
 #include "Provider.h"
 #include "SelectionMonitor.h"
 #include "Speaker.h"
@@ -304,33 +305,10 @@ void AppController::rebuildClient() {
 }
 
 QString AppController::buildSystemPrompt(bool jsonMode) const {
-    // Unknown/corrupt codes fall back to Simplified Chinese.
+    // Unknown/corrupt codes fall back to Simplified Chinese. Templates come
+    // from spec/prompts.json (shared with future clients).
     QString language = languageEnglishName(m_settings.targetLanguage);
     if (language.isEmpty())
         language = QStringLiteral("Simplified Chinese");
-    const QString target = tr("translate it into %1").arg(language);
-    if (jsonMode) {
-        return tr("You are a translation and dictionary assistant. The user message contains a "
-                  "short text after \"Text:\" and may also contain the sentence it was found in "
-                  "after \"Sentence:\". First DECIDE whether the text is a single word or term "
-                  "(including compounds, hyphenated words, phrasal verbs, idioms and set phrases "
-                  "like \"ice cream\", \"take off\", \"画蛇添足\") or a longer phrase/sentence, "
-                  "then respond ONLY with a JSON object (no markdown, no extra text) in one of "
-                  "these two forms:\n"
-                  "1) Word/term: {\"type\": \"word\", \"word\": \"...\", \"phonetic\": \"IPA for "
-                  "English, pinyin for Chinese, may be empty\", \"pos\": \"part of speech, e.g. "
-                  "\\\"n.\\\"\", \"meaning\": \"a concise definition in the SAME language as the "
-                  "text, using simpler terms\", \"explanation\": \"1-2 sentences in the SAME "
-                  "language as the text, using simple everyday words\", \"example\": \"one short "
-                  "example sentence in the SAME language as the text\"}. If a Sentence is given, "
-                  "explain the meaning the word has IN THAT SENTENCE, not the generic "
-                  "dictionary one.\n"
-                  "2) Phrase/sentence: {\"type\": \"phrase\", \"translation\": \"...\"} — %1. If "
-                  "a Sentence is given, use it to resolve ambiguity (pronouns, tense, "
-                  "context-specific senses).")
-            .arg(target);
-    }
-    return tr("You are a translation engine. Translate the user's text into %1. "
-              "Output only the translation: no explanations, no quotes, no markup.")
-        .arg(language);
+    return jsonMode ? Prompts::word(language) : Prompts::phrase(language);
 }

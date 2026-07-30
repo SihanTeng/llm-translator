@@ -18,24 +18,38 @@ qt_standard_project_setup()
 # embedded from resources/translator.qrc.
 set(CMAKE_AUTORCC ON)
 
+# Platform-neutral core: provider registry, LLM clients, prompts, word-card
+# formatting, history. Future macOS/Windows builds link the same library
+# with their own selection-capture/UI shell (see spec/integration.md).
+# NOTE: consumers must embed spec/spec.qrc themselves (Qt resources belong
+# to the final binary; the providers()/Prompts() data lives there).
+add_library(translator-core STATIC
+    core/LlmClient.cpp
+    core/Provider.cpp
+    core/Prompts.cpp
+    core/WordFormatter.cpp
+    core/HistoryStore.cpp
+)
+target_include_directories(translator-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/core)
+target_link_libraries(translator-core PUBLIC Qt6::Core Qt6::Gui Qt6::Network)
+
 qt_add_executable(translator
     src/main.cpp
     src/AppController.cpp
     src/ActionBar.cpp
     src/AppPickerDialog.cpp
     src/SelectionMonitor.cpp
-    src/LlmClient.cpp
     src/HistoryDialog.cpp
-    src/HistoryStore.cpp
     src/PopupWindow.cpp
     src/SettingsDialog.cpp
     src/Speaker.cpp
     src/Updater.cpp
-    src/WordFormatter.cpp
     resources/translator.qrc
+    spec/spec.qrc
 )
 
 target_link_libraries(translator PRIVATE
+    translator-core
     Qt6::Widgets
     Qt6::Network
     Qt6::DBus

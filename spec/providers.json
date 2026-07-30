@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "https://api.deepseek.com",
+      "defaultModel": "deepseek-v4-flash",
+      "altModel": "deepseek-v4-pro",
+      "envVar": "DEEPSEEK_API_KEY",
+      "keyPage": "https://platform.deepseek.com/api_keys",
+      "disableThinking": true
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "https://api.openai.com/v1",
+      "defaultModel": "gpt-5.6-luna",
+      "altModel": "gpt-5.6-terra",
+      "envVar": "OPENAI_API_KEY",
+      "keyPage": "https://platform.openai.com/api-keys"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "style": "openai-compatible",
+      "jsonMode": "prompt_only",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "defaultModel": "gemini-3.5-flash-lite",
+      "altModel": "gemini-3.6-flash",
+      "envVar": "GEMINI_API_KEY",
+      "keyPage": "https://aistudio.google.com/apikey"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "style": "anthropic",
+      "jsonMode": "prompt_only",
+      "baseUrl": "https://api.anthropic.com",
+      "defaultModel": "claude-haiku-4-5",
+      "altModel": "claude-sonnet-4-6",
+      "envVar": "ANTHROPIC_API_KEY",
+      "keyPage": "https://platform.claude.com/settings/keys"
+    },
+    {
+      "id": "grok",
+      "name": "Grok (xAI)",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "https://api.x.ai/v1",
+      "defaultModel": "grok-4-1-fast-non-reasoning",
+      "altModel": "grok-4.5",
+      "envVar": "XAI_API_KEY",
+      "keyPage": "https://console.x.ai"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "defaultModel": "google/gemini-2.5-flash-lite",
+      "altModel": "openai/gpt-4o-mini",
+      "envVar": "OPENROUTER_API_KEY",
+      "keyPage": "https://openrouter.ai/keys"
+    },
+    {
+      "id": "mimo",
+      "name": "Xiaomi MiMo",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "defaultModel": "mimo-v2.5",
+      "altModel": "mimo-v2.5-pro",
+      "envVar": "MIMO_API_KEY",
+      "keyPage": "https://platform.xiaomimimo.com"
+    },
+    {
+      "id": "custom",
+      "name": "Custom (OpenAI-compatible)",
+      "style": "openai-compatible",
+      "jsonMode": "response_format",
+      "baseUrl": "",
+      "defaultModel": "deepseek-v4-flash",
+      "altModel": "",
+      "envVar": "",
+      "keyPage": ""
+    }
+  ]
+}

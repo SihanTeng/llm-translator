@@ -1,7 +1,7 @@
 // Unit tests for HistoryStore: JSON persistence, newest-first ordering, the
 // entry cap, and clear(). Each test uses an explicit temp path via setPath().
 
-#include "../src/HistoryStore.h"
+#include "../core/HistoryStore.h"
 
 #include <QtTest>
 
