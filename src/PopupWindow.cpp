@@ -20,6 +20,7 @@ PopupWindow::PopupWindow(QWidget *parent)
     : QWidget(parent, Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , m_sourceLabel(new QLabel(this))
     , m_resultView(new QTextBrowser(this))
+    , m_speakButton(new QToolButton(this))
     , m_copyButton(new QToolButton(this))
     , m_closeButton(new QToolButton(this)) {
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -37,6 +38,15 @@ PopupWindow::PopupWindow(QWidget *parent)
     m_resultView->setStyleSheet(
         "QTextBrowser { background: transparent; color: palette(text); font-size: 14px; }"_L1);
 
+    const QIcon speakIcon = QIcon::fromTheme(QStringLiteral("audio-speakers"));
+    if (speakIcon.isNull())
+        m_speakButton->setText(tr("Speak"));
+    else
+        m_speakButton->setIcon(speakIcon);
+    m_speakButton->setToolTip(tr("Speak the selected text"));
+    m_speakButton->setAutoRaise(true);
+    m_speakButton->setFixedSize(28, 28);
+    m_speakButton->setIconSize(QSize(16, 16));
     const QIcon copyIcon = QIcon::fromTheme(QStringLiteral("edit-copy"));
     if (copyIcon.isNull())
         m_copyButton->setText(tr("Copy"));
@@ -58,11 +68,13 @@ PopupWindow::PopupWindow(QWidget *parent)
     const QString headerButtonStyle
         = "QToolButton { color: palette(mid); padding: 2px 8px; border-radius: 4px; }"
           "QToolButton:hover { color: palette(text); background: palette(midlight); }"_L1;
+    m_speakButton->setStyleSheet(headerButtonStyle);
     m_copyButton->setStyleSheet(headerButtonStyle);
     m_closeButton->setStyleSheet(headerButtonStyle);
 
     auto *header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 0, 0);
+    header->addWidget(m_speakButton);
     header->addWidget(m_copyButton);
     header->addStretch(1);
     header->addWidget(m_closeButton);
@@ -94,6 +106,8 @@ PopupWindow::PopupWindow(QWidget *parent)
     setStyleSheet("PopupWindow { background: palette(base); border: 1px solid palette(mid); "
                   "border-radius: 8px; }"_L1);
 
+    connect(
+        m_speakButton, &QToolButton::clicked, this, [this] { emit speakRequested(m_sourceText); });
     connect(m_copyButton, &QToolButton::clicked, this, [this] {
         QGuiApplication::clipboard()->setText(m_result, QClipboard::Clipboard);
         const QIcon okIcon = QIcon::fromTheme(
@@ -112,6 +126,7 @@ PopupWindow::PopupWindow(QWidget *parent)
 }
 
 void PopupWindow::startTranslation(const QString &sourceText, const QPoint &globalPos) {
+    m_sourceText = sourceText;
     m_result.clear();
     m_resultView->setPlainText(tr("Translating…"));
 

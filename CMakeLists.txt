@@ -18,10 +18,14 @@ qt_add_executable(translator
     src/main.cpp
     src/AppController.cpp
     src/ActionBar.cpp
+    src/AppPickerDialog.cpp
     src/SelectionMonitor.cpp
     src/DeepSeekClient.cpp
+    src/HistoryDialog.cpp
+    src/HistoryStore.cpp
     src/PopupWindow.cpp
     src/SettingsDialog.cpp
+    src/Speaker.cpp
     src/Updater.cpp
     src/WordFormatter.cpp
 )

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QStringList>
 
 class QCheckBox;
 class QComboBox;
@@ -15,7 +16,9 @@ struct AppSettings {
     QString baseUrl = QStringLiteral("https://api.deepseek.com");
     QString model = QStringLiteral("deepseek-v4-flash");
     QString targetLanguage = QStringLiteral("zh"); // zh | en | auto
-    bool monitorEnabled = true;
+    // WM_CLASS names that should never trigger the Translate bar (GNOME
+    // Wayland only — X11 selections carry no source-app information).
+    QStringList excludedApps;
     bool autoUpdate = true;
 
     static AppSettings load();
@@ -39,6 +42,6 @@ private:
     QLineEdit *m_baseUrlEdit;
     QComboBox *m_modelCombo;
     QComboBox *m_languageCombo;
-    QCheckBox *m_enabledCheck;
+    QLineEdit *m_excludedAppsEdit;
     QCheckBox *m_autoUpdateCheck;
 };

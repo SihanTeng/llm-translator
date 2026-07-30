@@ -40,6 +40,17 @@ add_translator_test(tst_selectionfilter
 add_translator_test(tst_appsettings
     tst_appsettings.cpp
     ../src/SettingsDialog.cpp
+    ../src/AppPickerDialog.cpp
+)
+
+add_translator_test(tst_apppicker
+    tst_apppicker.cpp
+    ../src/AppPickerDialog.cpp
+)
+
+add_translator_test(tst_historystore
+    tst_historystore.cpp
+    ../src/HistoryStore.cpp
 )
 
 add_translator_test(tst_actionbar

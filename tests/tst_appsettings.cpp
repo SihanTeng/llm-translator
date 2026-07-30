@@ -31,7 +31,7 @@ void TestAppSettings::defaults() {
     QCOMPARE(s.baseUrl, QStringLiteral("https://api.deepseek.com"));
     QCOMPARE(s.model, QStringLiteral("deepseek-v4-flash"));
     QCOMPARE(s.targetLanguage, QStringLiteral("zh"));
-    QVERIFY(s.monitorEnabled);
+    QVERIFY(s.excludedApps.isEmpty());
     QVERIFY(s.autoUpdate);
     QVERIFY(s.apiKey.isEmpty());
 }
@@ -42,7 +42,7 @@ void TestAppSettings::roundtrip() {
     s.baseUrl = QStringLiteral("https://example.com");
     s.model = QStringLiteral("deepseek-v4-pro");
     s.targetLanguage = QStringLiteral("en");
-    s.monitorEnabled = false;
+    s.excludedApps = { QStringLiteral("keepassxc"), QStringLiteral("org.gnome.Terminal") };
     s.autoUpdate = false;
     s.save();
 
@@ -51,7 +51,7 @@ void TestAppSettings::roundtrip() {
     QCOMPARE(loaded.baseUrl, s.baseUrl);
     QCOMPARE(loaded.model, s.model);
     QCOMPARE(loaded.targetLanguage, s.targetLanguage);
-    QCOMPARE(loaded.monitorEnabled, s.monitorEnabled);
+    QCOMPARE(loaded.excludedApps, s.excludedApps);
     QCOMPARE(loaded.autoUpdate, s.autoUpdate);
 }
 

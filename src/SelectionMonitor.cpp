@@ -16,10 +16,8 @@ SelectionMonitor::SelectionMonitor(QObject *parent)
     // Reliable PRIMARY-selection monitoring only exists on X11. On Wayland
     // the compositor only delivers selections to a focused window, so there
     // selections arrive via the GNOME Shell extension over D-Bus instead.
-    if (QGuiApplication::platformName() != "xcb"_L1) {
-        m_enabled = false;
+    if (QGuiApplication::platformName() != "xcb"_L1)
         return;
-    }
 
     connect(
         m_clipboard, &QClipboard::selectionChanged, this, &SelectionMonitor::onSelectionChanged);
@@ -44,15 +42,7 @@ bool SelectionMonitor::isAcceptableSelection(const QString &text) {
     return text.size() >= kMinLength && text.size() <= kMaxLength;
 }
 
-void SelectionMonitor::setEnabled(bool enabled) {
-    m_enabled = enabled;
-    if (!enabled)
-        m_debounce->stop();
-}
-
 void SelectionMonitor::onSelectionChanged() {
-    if (!m_enabled)
-        return;
     // Ignore selections made inside our own popup window.
     if (m_clipboard->ownsSelection())
         return;

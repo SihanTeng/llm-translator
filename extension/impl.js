@@ -48,6 +48,7 @@ export class TranslatorImpl {
         this._pendingText = '';
         this._pointer = [0, 0];
         this._autoHideId = 0;
+        this._excludedApps = [];
 
         this._selection = global.display.get_selection();
         this._selection.connectObject('owner-changed', this._onOwnerChanged.bind(this), this);
@@ -58,10 +59,14 @@ export class TranslatorImpl {
             Gio.BusType.SESSION,
             DBUS_NAME,
             Gio.BusNameWatcherFlags.NONE,
-            () => this._setShellUi(true),
+            () => {
+                this._setShellUi(true);
+                this._fetchExcludedApps();
+            },
             null
         );
         this._setShellUi(true);
+        this._fetchExcludedApps();
 
         this._signalSubId = Gio.DBus.session.signal_subscribe(
             null,
@@ -119,6 +124,7 @@ export class TranslatorImpl {
 
     _onOwnerChanged(_selection, selectionType, _owner) {
         if (selectionType !== Meta.SelectionType.SELECTION_PRIMARY) return;
+        if (this._isExcludedFocus()) return;
 
         St.Clipboard.get_default().get_text(St.ClipboardType.PRIMARY, (_cb, text) => {
             if (!text) return;
@@ -185,6 +191,41 @@ export class TranslatorImpl {
 
     // ---- translation panel ------------------------------------------------
 
+    // WM_CLASS-based app exclusion ("Exclude apps" in Settings): selections
+    // in these windows never show the bar. The list is fetched from the app
+    // and refreshed on ExcludedAppsChanged.
+    _isExcludedFocus() {
+        if (!this._excludedApps.length) return false;
+        const win = global.display.get_focus_window();
+        if (!win) return false;
+        const names = [win.get_wm_class(), win.get_wm_class_instance()]
+            .filter((name) => name && name.length > 0)
+            .map((name) => name.toLowerCase());
+        return names.some((name) => this._excludedApps.includes(name));
+    }
+
+    _fetchExcludedApps() {
+        Gio.DBus.session.call(
+            DBUS_NAME,
+            DBUS_PATH,
+            DBUS_IFACE,
+            'GetExcludedApps',
+            null,
+            null,
+            Gio.DBusCallFlags.NONE,
+            1000,
+            null,
+            (_conn, res) => {
+                try {
+                    const [apps] = Gio.DBus.session.call_finish(res).deep_unpack();
+                    this._excludedApps = apps.map((app) => app.toLowerCase());
+                } catch (_e) {
+                    // App not on the bus yet; the name watcher refetches.
+                }
+            }
+        );
+    }
+
     _showPanel(sourceText, x, y) {
         this._destroyPanel();
         this._translation = '';
@@ -210,6 +251,23 @@ export class TranslatorImpl {
         this._panel.set_width(Math.min(280, Math.round(monitor.width * 0.15)));
 
         const header = new St.BoxLayout({ vertical: false, style: 'margin-bottom: 6px;' });
+
+        const speakButton = this._iconButton('audio-speakers-symbolic');
+        speakButton.connect('clicked', () => {
+            Gio.DBus.session.call(
+                DBUS_NAME,
+                DBUS_PATH,
+                DBUS_IFACE,
+                'SpeakText',
+                new GLib.Variant('(s)', [sourceText]),
+                null,
+                Gio.DBusCallFlags.NONE,
+                1000,
+                null,
+                null
+            );
+        });
+        header.add_child(speakButton);
 
         const copyButton = this._iconButton('edit-copy-symbolic');
         copyButton.connect('clicked', () => {
@@ -273,6 +331,11 @@ export class TranslatorImpl {
     }
 
     _onAppSignal(_conn, _sender, _path, _iface, signal, params) {
+        if (signal === 'ExcludedAppsChanged') {
+            const [apps] = params.deep_unpack();
+            this._excludedApps = apps.map((app) => app.toLowerCase());
+            return;
+        }
         if (!this._panel) return;
         const [payload] = params.deep_unpack();
         if (signal === 'TranslationToken') {

@@ -6,8 +6,10 @@
 
 class ActionBar;
 class DeepSeekClient;
+class HistoryStore;
 class PopupWindow;
 class SelectionMonitor;
+class Speaker;
 class Updater;
 class QProgressDialog;
 class QSystemTrayIcon;
@@ -47,6 +49,14 @@ public slots:
     // Called by the GNOME Shell extension's panel Settings button.
     void ShowSettings();
 
+    // Called by the GNOME Shell extension's panel speaker button: speaks the
+    // text via the system TTS (spd-say).
+    void SpeakText(const QString &text);
+
+    // WM_CLASS names the Shell extension must not offer translations for
+    // (from Settings -> Exclude apps).
+    [[nodiscard]] QStringList GetExcludedApps() const { return m_settings.excludedApps; }
+
 signals:
     // Forwarded to the D-Bus session bus (ExportAllSignals) for the GNOME
     // Shell extension's translation panel.
@@ -56,6 +66,9 @@ signals:
     // Raw JSON payload of a dictionary-mode word explanation, so the Shell
     // extension can render its own structured card.
     void TranslationWordCard(const QString &jsonPayload);
+    // Emitted when the app exclusion list changes in Settings; the Shell
+    // extension refreshes its cached copy.
+    void ExcludedAppsChanged(const QStringList &apps);
 
 private:
     void onSelection(const QString &text);
@@ -64,6 +77,7 @@ private:
     void startTranslation(
         const QString &text, const QString &context, const QPoint &globalPos, bool showPopup);
     void openSettings();
+    void openHistory();
     void applySettings(const AppSettings &settings);
     void checkForUpdates();
     [[nodiscard]] QString buildSystemPrompt(bool wordMode) const;
@@ -74,12 +88,16 @@ private:
     PopupWindow *m_popup;
     ActionBar *m_actionBar;
     Updater *m_updater;
+    Speaker *m_speaker;
+    HistoryStore *m_history;
     QProgressDialog *m_updateProgress = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     AppSettings m_settings;
     QString m_pendingText;
     QString m_pendingContext;
     QPoint m_pendingPos;
+    QString m_currentSource;
+    QString m_resultBuffer;
     bool m_shellUiEnabled = false;
     bool m_jsonMode = false;
     QString m_jsonBuffer;

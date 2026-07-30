@@ -15,9 +15,6 @@ class SelectionMonitor : public QObject {
 public:
     explicit SelectionMonitor(QObject *parent = nullptr);
 
-    void setEnabled(bool enabled);
-    [[nodiscard]] bool isEnabled() const { return m_enabled; }
-
     // Clears the duplicate-selection memory so the same text can trigger
     // again (e.g. after the action bar was dismissed).
     void resetLastEmitted() { m_lastEmitted.clear(); }
@@ -38,7 +35,6 @@ private:
     QTimer *m_debounce;
     QString m_pending;
     QString m_lastEmitted;
-    bool m_enabled = true;
 
     static constexpr int kDebounceMs = 300;
     static constexpr int kMinLength = 2;

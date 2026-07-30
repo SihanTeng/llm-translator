@@ -95,9 +95,15 @@ workaround, XWayland selections are still visible via the X11 path).
      (learner's-dictionary style), while sentences are translated into
      your configured target language.
 4. `Esc` or clicking anywhere else dismisses the popup; `Copy` copies the
-   translation.
-5. The tray icon (where a tray is available) opens Settings, pauses
-   monitoring, or quits.
+   translation; the speaker button reads the selected text aloud (via
+   speech-dispatcher's `spd-say`).
+5. The tray icon (where a tray is available) opens History or Settings, or
+   quits.
+
+Every completed translation is appended to a local history
+(`~/.local/share/translator/translator/history.json`, capped at 500 entries,
+newest first). The tray menu's **History…** opens a filterable list with
+copy and clear actions; failed requests are never recorded.
 
 Settings are stored in `~/.config/translator/translator.conf`.
 
@@ -106,6 +112,11 @@ Settings are stored in `~/.config/translator/translator.conf`.
 - **Model** defaults to `deepseek-v4-flash`; `deepseek-v4-pro` is available.
 - **Translate to** defaults to Simplified Chinese; English and auto
   (Chinese ↔ English) are also available.
+- **Exclude apps** is a list of window classes (WM_CLASS); selections in
+  those apps never show the Translate bar — useful for password managers.
+  Click **Choose…** to pick from your installed apps instead of typing class
+  names. GNOME Wayland only (X11 selections carry no source-app
+  information).
 
 ## Development
 
@@ -119,20 +130,23 @@ the real app over D-Bus against a mock DeepSeek server (no display needed):
 
 ```sh
 cmake --build build
-cd build && ctest --output-on-failure   # 6 unit suites
+cd build && ctest --output-on-failure   # 7 unit suites
 cd .. && ./tests/e2e.sh                 # phrase stream, word JSON+context, 401 path
 ```
 
 - `tests/tst_*.cpp` — semver compare, SSE delta parsing, dictionary card
   HTML (incl. XSS escaping), selection filter, settings roundtrip
-  (isolated via `XDG_CONFIG_HOME`), action bar signals.
+  (isolated via `XDG_CONFIG_HOME`), history store persistence/cap/clear,
+  action bar signals.
 - `tests/e2e.sh` — real binary + `dbus-run-session` +
   `tests/mock_deepseek_server.py`; asserts request shapes (stream vs JSON
-  mode, `Word:`/`Sentence:` context) and D-Bus signal flows.
+  mode, `Word:`/`Sentence:` context), D-Bus signal flows, the
+  `GetExcludedApps` round-trip, `SpeakText` crash-safety, and that only
+  successful translations land in `history.json`.
 - `tests/selection_setter.cpp` — manual helper: owns the X11 PRIMARY
   selection with given text for interactive testing.
-- `TRANSLATOR_SETTINGS_DIR` env var isolates app settings from the real
-  `~/.config` (used by the e2e script).
+- `TRANSLATOR_SETTINGS_DIR` env var isolates app settings and data from the
+  real `~/.config` / `~/.local/share` (used by the e2e script).
 
 Pre-commit runs `scripts/check.sh` (clang-format, prettier, node --check,
 full build); CI mirrors it and adds the test jobs on every push.

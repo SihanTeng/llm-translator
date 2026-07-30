@@ -2,8 +2,11 @@
 
 #include "ActionBar.h"
 #include "DeepSeekClient.h"
+#include "HistoryDialog.h"
+#include "HistoryStore.h"
 #include "PopupWindow.h"
 #include "SelectionMonitor.h"
+#include "Speaker.h"
 #include "Updater.h"
 #include "WordFormatter.h"
 
@@ -30,7 +33,9 @@ AppController::AppController(QObject *parent)
     , m_monitor(new SelectionMonitor(this))
     , m_client(new DeepSeekClient(this))
     , m_popup(new PopupWindow)
-    , m_actionBar(new ActionBar) {
+    , m_actionBar(new ActionBar)
+    , m_speaker(new Speaker(this))
+    , m_history(new HistoryStore(this)) {
     applySettings(AppSettings::load());
 
     connect(m_monitor, &SelectionMonitor::selectionReady, this, &AppController::onSelection);
@@ -38,6 +43,7 @@ AppController::AppController(QObject *parent)
     connect(
         m_actionBar, &ActionBar::translateRequested, this, &AppController::startPendingTranslation);
     connect(m_popup, &PopupWindow::settingsRequested, this, &AppController::openSettings);
+    connect(m_popup, &PopupWindow::speakRequested, m_speaker, &Speaker::speak);
     // Allow re-selecting the same text after the bar was dismissed.
     connect(m_actionBar, &ActionBar::dismissed, m_monitor, &SelectionMonitor::resetLastEmitted);
 
@@ -48,6 +54,7 @@ AppController::AppController(QObject *parent)
             m_jsonBuffer += delta;
             return;
         }
+        m_resultBuffer += delta;
         m_popup->appendToken(delta);
         emit TranslationToken(delta);
     });
@@ -61,6 +68,7 @@ AppController::AppController(QObject *parent)
                 const QString translation = obj["translation"_L1].toString();
                 m_popup->setResult(translation.toHtmlEscaped());
                 emit TranslationToken(translation);
+                m_history->add(m_currentSource, translation);
             } else {
                 const QString html = formatWordCardHtml(m_jsonBuffer);
                 m_popup->setResult(html);
@@ -70,8 +78,12 @@ AppController::AppController(QObject *parent)
                 // Plain-text form for older extension versions.
                 QTextDocument doc;
                 doc.setHtml(html);
-                emit TranslationToken(doc.toPlainText().trimmed());
+                const QString plain = doc.toPlainText().trimmed();
+                emit TranslationToken(plain);
+                m_history->add(m_currentSource, plain);
             }
+        } else {
+            m_history->add(m_currentSource, m_resultBuffer);
         }
         emit TranslationFinished();
     });
@@ -88,14 +100,8 @@ AppController::AppController(QObject *parent)
 
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         auto *menu = new QMenu;
+        menu->addAction(tr("History…"), this, &AppController::openHistory);
         menu->addAction(tr("Settings…"), this, &AppController::openSettings);
-        auto *toggle = menu->addAction(tr("Pause monitoring"), this, [this](bool checked) {
-            m_settings.monitorEnabled = !checked;
-            m_monitor->setEnabled(m_settings.monitorEnabled);
-            m_settings.save();
-        });
-        toggle->setCheckable(true);
-        toggle->setChecked(!m_settings.monitorEnabled);
         menu->addSeparator();
         menu->addAction(tr("Quit"), qApp, &QApplication::quit);
 
@@ -174,8 +180,6 @@ void AppController::TranslateSelection(const QString &text, int x, int y) {
 
 void AppController::TranslateSelectionWithContext(
     const QString &text, const QString &context, int x, int y) {
-    if (!m_settings.monitorEnabled)
-        return;
     if (m_shellUiEnabled) {
         // The extension renders the bar and the translation panel itself;
         // just run the request. The result reaches it via TranslationToken.
@@ -187,6 +191,10 @@ void AppController::TranslateSelectionWithContext(
 
 void AppController::SetShellUiEnabled(bool enabled) {
     m_shellUiEnabled = enabled;
+}
+
+void AppController::SpeakText(const QString &text) {
+    m_speaker->speak(text);
 }
 
 void AppController::ShowSettings() {
@@ -220,6 +228,8 @@ void AppController::startTranslation(
     m_client->cancel();
     m_jsonMode = isShortText(text);
     m_jsonBuffer.clear();
+    m_currentSource = text;
+    m_resultBuffer.clear();
     if (showPopup)
         m_popup->startTranslation(text, globalPos);
 
@@ -252,13 +262,18 @@ void AppController::openSettings() {
         applySettings(dialog.settings());
 }
 
+void AppController::openHistory() {
+    HistoryDialog dialog(m_history);
+    dialog.exec();
+}
+
 void AppController::applySettings(const AppSettings &settings) {
     m_settings = settings;
     m_settings.save();
     m_client->setApiKey(m_settings.effectiveApiKey());
     m_client->setBaseUrl(m_settings.baseUrl);
     m_client->setModel(m_settings.model);
-    m_monitor->setEnabled(m_settings.monitorEnabled);
+    emit ExcludedAppsChanged(m_settings.excludedApps);
 }
 
 QString AppController::buildSystemPrompt(bool jsonMode) const {

@@ -6,6 +6,8 @@
 #   1. phrase translation (SSE streaming, correct request shape)
 #   2. single word + context (JSON mode, response_format, Word:/Sentence:)
 #   3. auth failure (401 -> TranslationError signal)
+#   4. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
+#   5. history.json written for successful requests only
 #
 # Usage: tests/e2e.sh [path-to-binary]   (default: build/translator)
 
@@ -31,7 +33,7 @@ apiKey=test-key
 baseUrl=http://127.0.0.1:$PORT
 model=deepseek-v4-flash
 targetLanguage=zh
-monitorEnabled=true
+excludedApps=keepassxc, org.gnome.Terminal
 autoUpdate=false
 EOF
 
@@ -53,6 +55,14 @@ sleep 2
 
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
     --method org.translator.App.SetShellUiEnabled true > /dev/null
+
+# App exclusion list round-trips over D-Bus (the Shell extension reads this).
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.GetExcludedApps > "$WORK/excluded.txt"
+
+# TTS entry point must not crash the app, even with no audio stack.
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.SpeakText "hello" > /dev/null
 
 # Case 1: long sentence (streams)
 gdbus call --session --dest org.translator.App --object-path /org/translator/App \
@@ -141,6 +151,30 @@ if "TranslationError" not in signals:
     failures.append("expected TranslationError for the bad-key case")
 if "unauthorized" not in signals and "401" not in signals:
     failures.append("error signal did not carry the 401 detail")
+
+# --- app exclusion list -------------------------------------------------------
+with open(f"{work}/excluded.txt") as f:
+    excluded = f.read()
+if "keepassxc" not in excluded:
+    failures.append(f"GetExcludedApps did not return the configured list: {excluded!r}")
+
+# --- history ------------------------------------------------------------------
+try:
+    with open(f"{work}/settings/translator/translator/history.json") as f:
+        history = json.load(f)
+except (OSError, json.JSONDecodeError) as e:
+    failures.append(f"history file missing or invalid: {e}")
+    history = []
+if len(history) < 3:
+    failures.append(
+        f"expected >=3 history entries (stream, phrase JSON, word card), got {len(history)}")
+sources = [e.get("source", "") for e in history]
+if not any("lazy dog" in s for s in sources):
+    failures.append(f"streamed translation not recorded in history: {sources!r}")
+if not any(s == "bank" for s in sources):
+    failures.append(f"word card not recorded in history: {sources!r}")
+if any("hello again" in s for s in sources):
+    failures.append("failed (401) request must not be recorded in history")
 
 if failures:
     print("E2E FAILURES:")

@@ -24,6 +24,9 @@ public:
 
 signals:
     void settingsRequested();
+    // Emitted with the current source text when the speaker button is
+    // clicked (text-to-speech of the selection).
+    void speakRequested(const QString &text);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -36,7 +39,9 @@ private:
 
     QLabel *m_sourceLabel;
     QTextBrowser *m_resultView;
+    QToolButton *m_speakButton;
     QToolButton *m_copyButton;
     QToolButton *m_closeButton;
+    QString m_sourceText;
     QString m_result;
 };
