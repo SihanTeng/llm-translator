@@ -15,11 +15,11 @@
 #include <QCursor>
 #include <QDBusConnection>
 #include <QDesktopServices>
+#include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPixmap>
 #include <QProgressDialog>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -102,9 +102,11 @@ AppController::AppController(QObject *parent)
         menu->addSeparator();
         menu->addAction(tr("Quit"), qApp, &QApplication::quit);
 
-        QPixmap pixmap(32, 32);
-        pixmap.fill(Qt::darkCyan);
-        m_tray = new QSystemTrayIcon(QIcon(pixmap), this);
+        // Prefer the installed theme icon; fall back to the embedded asset so
+        // a non-installed build (./build/.../translator) still shows branding.
+        const QIcon appIcon = QIcon::fromTheme(
+            QStringLiteral("translator"), QIcon(QStringLiteral(":/translator.png")));
+        m_tray = new QSystemTrayIcon(appIcon, this);
         m_tray->setToolTip(tr("Translator"));
         m_tray->setContextMenu(menu);
         m_tray->show();

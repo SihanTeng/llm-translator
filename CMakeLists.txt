@@ -63,9 +63,9 @@ install(FILES clients/linux-qt/extension/metadata.json
 install(FILES clients/linux-qt/extension/install.sh
         DESTINATION share/translator/extension)
 install(FILES packaging/translator.desktop DESTINATION share/applications)
-# D-Bus activation: lets the GNOME Shell extension start the app on demand
-# when it calls org.translator.App (otherwise the call fails when the app
-# is not running yet).
+# D-Bus activation: the GNOME Shell extension starts the app on demand when
+# the user clicks Translate (not at login — extension enable uses
+# NO_AUTO_START for handshake-only calls).
 configure_file(packaging/org.translator.App.service.in
                ${CMAKE_BINARY_DIR}/org.translator.App.service @ONLY)
 install(FILES ${CMAKE_BINARY_DIR}/org.translator.App.service

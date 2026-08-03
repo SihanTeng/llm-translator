@@ -1,0 +1,11 @@
+[
+  {
+    "date": "2026-08-03",
+    "macrostructure": "Index-First",
+    "theme": "Cobalt",
+    "enrichment": "none",
+    "brief": "History dialog redesign — filterable translation archive",
+    "scope": "app-dialog",
+    "genre": "modern-minimal"
+  }
+]

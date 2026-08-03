@@ -73,6 +73,12 @@ export class TranslatorImpl {
 
         // The app renders no Qt UI for D-Bus translations while we exist.
         // Re-register whenever the app (re)appears on the bus.
+        //
+        // Do NOT call the bus here with auto-start: that would launch the
+        // app at every GNOME session start (extension enable). D-Bus
+        // activation is reserved for user-initiated actions (bar click →
+        // TranslateSelection). Name watch + NO_AUTO_START pings only talk
+        // to an already-running process.
         this._nameWatchId = Gio.bus_watch_name(
             Gio.BusType.SESSION,
             DBUS_NAME,
@@ -83,8 +89,6 @@ export class TranslatorImpl {
             },
             null
         );
-        this._setShellUi(true);
-        this._fetchExcludedApps();
 
         this._signalSubId = Gio.DBus.session.signal_subscribe(
             null,
@@ -273,7 +277,8 @@ export class TranslatorImpl {
             'GetExcludedApps',
             null,
             null,
-            Gio.DBusCallFlags.NONE,
+            // Never launch the app just to read settings.
+            Gio.DBusCallFlags.NO_AUTO_START,
             1000,
             null,
             (_conn, res) => {
@@ -558,7 +563,8 @@ export class TranslatorImpl {
             'SetShellUiEnabled',
             new GLib.Variant('(b)', [enabled]),
             null,
-            Gio.DBusCallFlags.NONE,
+            // Handshake only — must not D-Bus-activate at login or disable.
+            Gio.DBusCallFlags.NO_AUTO_START,
             1000,
             null,
             null

@@ -1,0 +1,44 @@
+/* Hallmark · tokens for Translator app surfaces
+ * genre: modern-minimal · theme: Cobalt (palette-mapped for Qt light/dark)
+ * macrostructure (history): Index-First
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ *
+ * Qt dialogs consume these via QSS palette() roles + the accent mapping below.
+ * Do not hard-code paper/ink — GNOME Adwaita light/dark owns those.
+ */
+:root {
+  /* Paper / ink — conceptual; runtime uses palette(window/base/text) */
+  --color-paper:      oklch(98.5% 0.004 250);
+  --color-paper-2:    oklch(96% 0.006 250);
+  --color-ink:        oklch(24% 0.02 258);
+  --color-ink-2:      oklch(34% 0.018 257);
+  --color-rule:       oklch(88% 0.01 250);
+  --color-muted:      oklch(55% 0.015 250);
+
+  /* Cobalt signal — maps to palette(link) / ActionBar #2d7dff */
+  --color-accent:     oklch(58% 0.20 256);
+  --color-accent-ink: oklch(99% 0 0);
+  --color-focus:      oklch(58% 0.20 256);
+
+  --font-display: system-ui, "Inter", "Segoe UI", sans-serif;
+  --font-body:    system-ui, "Inter", "Segoe UI", sans-serif;
+  --font-mono:    ui-monospace, "JetBrains Mono", "SF Mono", monospace;
+
+  --space-2xs: 4px;
+  --space-xs:  8px;
+  --space-sm:  12px;
+  --space-md:  16px;
+  --space-lg:  20px;
+  --space-xl:  28px;
+
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 20px;
+
+  --radius-control: 6px;
+  --radius-panel:   8px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 180ms;
+}

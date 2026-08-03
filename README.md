@@ -106,6 +106,12 @@ workaround, XWayland selections are still visible via the X11 path).
 5. The tray icon (where a tray is available) opens History or Settings, or
    quits.
 
+The app does **not** start at login. On GNOME Wayland the Shell extension
+stays loaded, but it only D-Bus-activates the backend when you click the
+Translate bar (or open Settings from the panel). Quit from the tray anytime;
+the next Translate click starts it again. On X11, start the app yourself
+(desktop entry, `translator`, or the tray after a manual launch).
+
 Every completed translation is appended to a local history
 (`~/.local/share/translator/translator/history.json`, capped at 500 entries,
 newest first). The tray menu's **History…** opens a filterable list with

@@ -1,6 +1,7 @@
 #include "AppController.h"
 
 #include <QApplication>
+#include <QIcon>
 
 int main(int argc, char *argv[]) {
     // Tests/e2e can isolate settings and data (history) away from the user's
@@ -20,6 +21,9 @@ int main(int argc, char *argv[]) {
     QApplication::setApplicationName(QStringLiteral("translator"));
     QApplication::setOrganizationName(QStringLiteral("translator"));
     QApplication::setQuitOnLastWindowClosed(false);
+    // Theme icon when installed; embedded PNG when running from the build tree.
+    QApplication::setWindowIcon(
+        QIcon::fromTheme(QStringLiteral("translator"), QIcon(QStringLiteral(":/translator.png"))));
 
     AppController controller;
     return QApplication::exec();

@@ -1,4 +1,7 @@
 <RCC>
+    <qresource prefix="/">
+        <file alias="translator.png">translator.png</file>
+    </qresource>
     <qresource prefix="/flags">
         <file alias="cn.png">flags/cn.png</file>
         <file alias="tw.png">flags/tw.png</file>
