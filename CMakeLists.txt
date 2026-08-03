@@ -63,6 +63,13 @@ install(FILES clients/linux-qt/extension/metadata.json
 install(FILES clients/linux-qt/extension/install.sh
         DESTINATION share/translator/extension)
 install(FILES packaging/translator.desktop DESTINATION share/applications)
+# D-Bus activation: lets the GNOME Shell extension start the app on demand
+# when it calls org.translator.App (otherwise the call fails when the app
+# is not running yet).
+configure_file(packaging/org.translator.App.service.in
+               ${CMAKE_BINARY_DIR}/org.translator.App.service @ONLY)
+install(FILES ${CMAKE_BINARY_DIR}/org.translator.App.service
+        DESTINATION share/dbus-1/services)
 install(FILES packaging/translator.png
         DESTINATION share/icons/hicolor/256x256/apps
         RENAME translator.png)

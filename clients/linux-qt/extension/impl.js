@@ -55,6 +55,7 @@ export class TranslatorImpl {
         this._pointer = [0, 0];
         this._autoHideId = 0;
         this._barMoveCheckId = 0;
+        this._panelWatchdogId = 0;
         this._excludedApps = [];
 
         this._selection = global.display.get_selection();
@@ -232,9 +233,18 @@ export class TranslatorImpl {
             new GLib.Variant('(ssii)', [text, context, x, y]),
             null,
             Gio.DBusCallFlags.NONE,
-            2000,
+            // Generous: may include D-Bus activation (cold start) of the app.
+            10000,
             null,
-            null
+            (_conn, res) => {
+                try {
+                    Gio.DBus.session.call_finish(res);
+                } catch (_e) {
+                    this._showPanelError(
+                        'Could not reach the translator app — it is not running and could not be started.'
+                    );
+                }
+            }
         );
 
         this._showPanel(text, x, y);
@@ -379,6 +389,26 @@ export class TranslatorImpl {
 
         Main.layoutManager.uiGroup.add_child(this._panel);
         this._placeNear(this._panel, x, y);
+
+        // Last-resort watchdog: the backend guarantees a terminal signal
+        // within its 120s request timeout, so if nothing at all arrived by
+        // then the app died mid-request or the reply was lost — don't leave
+        // "Translating…" on screen forever.
+        this._removePanelWatchdog();
+        this._panelWatchdogId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 130 * 1000, () => {
+            this._panelWatchdogId = 0;
+            this._showPanelError('No response from the translator app — please try again.');
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Shows an error in the panel unless content already arrived (late
+    // errors must not clobber a finished translation).
+    _showPanelError(message) {
+        this._removePanelWatchdog();
+        if (!this._panel || this._translation) return;
+        this._translationLabel.show();
+        this._translationLabel.set_text(message);
     }
 
     _onAppSignal(_conn, _sender, _path, _iface, signal, params) {
@@ -388,17 +418,23 @@ export class TranslatorImpl {
             return;
         }
         if (!this._panel) return;
+        // Any panel signal means the app answered: disarm the watchdog.
+        this._removePanelWatchdog();
         const [payload] = params.deep_unpack();
         if (signal === 'TranslationToken') {
             if (!this._translation) this._translationLabel.set_text('');
             this._translation += payload;
             this._translationLabel.set_text(this._translation);
         } else if (signal === 'TranslationError') {
+            this._translationLabel.show();
             this._translationLabel.set_text(payload);
         } else if (signal === 'TranslationWordCard') {
             this._renderWordCard(payload);
+        } else if (signal === 'TranslationFinished' && !this._translation) {
+            // A terminal signal with no content must not leave
+            // "Translating…" on screen.
+            this._showPanelError('(empty response from the model)');
         }
-        // TranslationFinished: nothing to do, tokens are all shown.
     }
 
     // Renders the dictionary-mode JSON payload as a structured card with
@@ -549,7 +585,15 @@ export class TranslatorImpl {
         this._bar = null;
     }
 
+    _removePanelWatchdog() {
+        if (this._panelWatchdogId) {
+            GLib.Source.remove(this._panelWatchdogId);
+            this._panelWatchdogId = 0;
+        }
+    }
+
     _destroyPanel() {
+        this._removePanelWatchdog();
         this._panel?.destroy();
         this._panel = null;
         this._translationLabel = null;

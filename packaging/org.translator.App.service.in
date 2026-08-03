@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.translator.App
+Exec=@CMAKE_INSTALL_PREFIX@/bin/translator
