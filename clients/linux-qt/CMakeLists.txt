@@ -38,6 +38,14 @@ target_compile_definitions(translator PRIVATE
     TRANSLATOR_VERSION="${TRANSLATOR_VERSION}"
 )
 
+# X11 (xcb): lets the ActionBar detect click-away via _NET_ACTIVE_WINDOW
+# changes, since it never takes focus and gets no WindowDeactivate events.
+find_library(XCB_LIBRARY xcb)
+if(XCB_LIBRARY)
+    target_link_libraries(translator PRIVATE ${XCB_LIBRARY})
+    target_compile_definitions(translator PRIVATE TRANSLATOR_HAVE_XCB)
+endif()
+
 # Optional KDE/wlroots popup placement via wlr-layer-shell (LayerShellQt).
 # GNOME does not support layer-shell; the GNOME Shell extension covers it.
 # Requires LayerShellQt, e.g. 'sudo dnf install layer-shell-qt' on Fedora.

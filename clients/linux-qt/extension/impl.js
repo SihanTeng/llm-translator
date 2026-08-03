@@ -14,6 +14,12 @@ const DBUS_IFACE = 'org.translator.App';
 const MIN_LENGTH = 2;
 const MAX_LENGTH = 4000;
 const AUTO_HIDE_SECONDS = 8;
+// Hide the bar once the pointer moves this far away from it (px). Clicks
+// inside Wayland clients are invisible to Shell extensions (stage
+// captured-event never sees them — verified on GNOME 50), but every
+// click-away starts with the pointer leaving the bar's vicinity, and the
+// pointer position is always observable via global.get_pointer().
+const BAR_DISMISS_DISTANCE = 150;
 
 const BAR_STYLE =
     'background-color: #3584e4; color: white; border-radius: 10px; ' + 'padding: 8px 10px;';
@@ -48,10 +54,21 @@ export class TranslatorImpl {
         this._pendingText = '';
         this._pointer = [0, 0];
         this._autoHideId = 0;
+        this._barMoveCheckId = 0;
         this._excludedApps = [];
 
         this._selection = global.display.get_selection();
         this._selection.connectObject('owner-changed', this._onOwnerChanged.bind(this), this);
+
+        // Dismiss the bar when the focused window changes without the pointer
+        // leaving (e.g. Alt+Tab). Click-away itself is covered by the
+        // pointer-distance check in _showBar and by the collapsed-selection
+        // case in _onOwnerChanged.
+        this._focusWindowId = global.display.connect('notify::focus-window', () => {
+            if (!this._bar) return;
+            this._removeAutoHide();
+            this._destroyBar();
+        });
 
         // The app renders no Qt UI for D-Bus translations while we exist.
         // Re-register whenever the app (re)appears on the bus.
@@ -115,6 +132,10 @@ export class TranslatorImpl {
         this._setShellUi(false);
         this._selection?.disconnectObject(this);
         this._selection = null;
+        if (this._focusWindowId) {
+            global.display.disconnect(this._focusWindowId);
+            this._focusWindowId = 0;
+        }
         this._removeAutoHide();
         this._destroyBar();
         this._destroyPanel();
@@ -127,7 +148,13 @@ export class TranslatorImpl {
         if (this._isExcludedFocus()) return;
 
         St.Clipboard.get_default().get_text(St.ClipboardType.PRIMARY, (_cb, text) => {
-            if (!text) return;
+            if (!text || !text.trim()) {
+                // Selection collapsed or cleared (user clicked away):
+                // dismiss the bar instead of letting it linger.
+                this._removeAutoHide();
+                this._destroyBar();
+                return;
+            }
             text = text.trim();
             if (text.length < MIN_LENGTH || text.length > MAX_LENGTH) return;
 
@@ -155,6 +182,30 @@ export class TranslatorImpl {
         Main.layoutManager.uiGroup.add_child(this._bar);
         this._placeNear(this._bar, ...this._pointer);
         this._bar.connect('clicked', () => this._onBarClicked());
+
+        // Click-away dismissal. Extensions cannot observe clicks inside
+        // Wayland clients (see BAR_DISMISS_DISTANCE), so watch the pointer
+        // instead: moving away from the bar always precedes a click-away.
+        this._removeBarMoveCheck();
+        this._barMoveCheckId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+            const bar = this._bar;
+            if (!bar) {
+                this._barMoveCheckId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            const [px, py] = global.get_pointer();
+            // Distance from the pointer to the bar's rect (0 when inside).
+            const dx =
+                px < bar.x ? bar.x - px : px >= bar.x + bar.width ? px - (bar.x + bar.width) : 0;
+            const dy =
+                py < bar.y ? bar.y - py : py >= bar.y + bar.height ? py - (bar.y + bar.height) : 0;
+            if (dx * dx + dy * dy > BAR_DISMISS_DISTANCE * BAR_DISMISS_DISTANCE) {
+                this._barMoveCheckId = 0;
+                this._destroyBar();
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
 
         this._removeAutoHide();
         this._autoHideId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, AUTO_HIDE_SECONDS * 1000, () => {
@@ -485,7 +536,15 @@ export class TranslatorImpl {
         }
     }
 
+    _removeBarMoveCheck() {
+        if (this._barMoveCheckId) {
+            GLib.Source.remove(this._barMoveCheckId);
+            this._barMoveCheckId = 0;
+        }
+    }
+
     _destroyBar() {
+        this._removeBarMoveCheck();
         this._bar?.destroy();
         this._bar = null;
     }
