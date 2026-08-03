@@ -4,11 +4,14 @@ Research date: 2026-07-29. Method: web research (official sites, repos, docs,
 review threads) on mature open- and closed-source apps comparable to this
 project, followed by a feature/UX comparison against our codebase.
 
-> **Status (2026-07-30):** several "table stakes we lack" items below have
-> since shipped — history (#4), TTS (#2 popup buttons), and the app
-> exclusion list (#5), plus multi-provider support (beyond the scope of
-> this doc's "LLM-only niche" framing). The remaining recommendations are
-> still open. Treat the gap list as a snapshot, not a backlog.
+> **Status (2026-08-03):** several "table stakes we lack" items below have
+> since shipped — history (#4), TTS (#2 popup buttons), the app exclusion
+> list (#5), multi-provider support, and the D-Bus/CLI control plane
+> (`TranslateText`, `TranslateClipboard`, `CancelTranslation`,
+> `translator --translate*` single-instance forward) plus generation-based
+> session/op isolation in the Rust backend. Remaining open: multi-action
+> bar, popup pin/retry/lang-toggle, OCR, replace-in-place. Treat the gap
+> list as a snapshot, not a backlog.
 
 ## TL;DR
 

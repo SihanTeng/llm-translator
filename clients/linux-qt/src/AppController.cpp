@@ -12,9 +12,11 @@
 #include "WordFormatter.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QCursor>
 #include <QDBusConnection>
 #include <QDesktopServices>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -50,7 +52,11 @@ AppController::AppController(QObject *parent)
 
     // Short selections go through JSON mode (the model decides word vs
     // phrase); the raw JSON is buffered and rendered at the end.
+    // Backend drops superseded gens before emitting; m_activeGeneration is a
+    // second gate so json-buffer / popup state never mixes across ops.
     connect(m_backend, &Backend::tokenReceived, this, [this](const QString &delta) {
+        if (m_backend->currentGeneration() != m_activeGeneration)
+            return;
         if (m_jsonMode) {
             m_jsonBuffer += delta;
             return;
@@ -59,6 +65,8 @@ AppController::AppController(QObject *parent)
         emit TranslationToken(delta);
     });
     connect(m_backend, &Backend::requestFinished, this, [this] {
+        if (m_backend->currentGeneration() != m_activeGeneration)
+            return;
         if (m_jsonMode) {
             // The backend already canonicalized the JSON object (fences and
             // prose stripped); history recording happens there too.
@@ -85,6 +93,8 @@ AppController::AppController(QObject *parent)
         emit TranslationFinished();
     });
     connect(m_backend, &Backend::errorOccurred, this, [this](const QString &message) {
+        if (m_backend->currentGeneration() != m_activeGeneration)
+            return;
         m_popup->showError(message);
         emit TranslationError(message);
     });
@@ -188,6 +198,35 @@ void AppController::TranslateSelectionWithContext(
     offerTranslation(text, context, QPoint(x, y));
 }
 
+void AppController::TranslateText(const QString &text) {
+    TranslateTextWithContext(text, QString());
+}
+
+void AppController::TranslateTextWithContext(const QString &text, const QString &context) {
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty())
+        return;
+    // Hotkey/CLI already expresses intent — skip the action bar.
+    const QPoint pos = QCursor::pos();
+    startTranslation(trimmed, context, pos, !m_shellUiEnabled);
+}
+
+void AppController::TranslateClipboard() {
+    const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
+    TranslateText(text);
+}
+
+void AppController::CancelTranslation() {
+    m_backend->cancel();
+    m_activeGeneration = m_backend->currentGeneration();
+    m_jsonBuffer.clear();
+    m_jsonMode = false;
+    m_pendingText.clear();
+    m_pendingContext.clear();
+    m_actionBar->hide();
+    m_popup->hide();
+}
+
 void AppController::SetShellUiEnabled(bool enabled) {
     m_shellUiEnabled = enabled;
 }
@@ -208,7 +247,12 @@ void AppController::onSelection(const QString &text) {
 
 void AppController::offerTranslation(
     const QString &text, const QString &context, const QPoint &globalPos) {
+    // Invalidate any in-flight stream so a dismissed bar cannot be overtaken
+    // by late tokens from a previous click.
     m_backend->cancel();
+    m_activeGeneration = m_backend->currentGeneration();
+    m_jsonBuffer.clear();
+    m_jsonMode = false;
     m_popup->hide();
     m_pendingText = text;
     m_pendingContext = context;
@@ -224,15 +268,18 @@ void AppController::startPendingTranslation() {
 
 void AppController::startTranslation(
     const QString &text, const QString &context, const QPoint &globalPos, bool showPopup) {
-    m_backend->cancel();
     m_jsonMode = isShortText(text);
     m_jsonBuffer.clear();
     if (showPopup)
         m_popup->startTranslation(text, globalPos);
+    else
+        m_popup->hide();
 
     // In JSON mode the model classifies the selection itself; the backend
-    // builds the prompt and the "Text:"/"Sentence:" user content.
+    // builds the prompt and the "Text:"/"Sentence:" user content. translate()
+    // cancels any prior op and bumps the generation we then pin.
     m_backend->translate(text, context, targetLanguageName(), m_jsonMode);
+    m_activeGeneration = m_backend->currentGeneration();
 }
 
 // Short selections are handled in JSON mode, where the model decides whether

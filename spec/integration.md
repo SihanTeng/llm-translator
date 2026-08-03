@@ -30,12 +30,30 @@ anyone's API key.
    owns keys, settings, and provider traffic over a local IPC channel. Use
    this when the platform restricts background selection reading or window
    placement. Our reference IPC is the D-Bus interface `org.translator.App`
-   (see `clients/linux-qt/src/AppController.h`): methods `TranslateSelection`,
-   `TranslateSelectionWithContext`, `SetShellUiEnabled`, `ShowSettings`,
-   `SpeakText`, `GetExcludedApps`; signals `TranslationToken`,
-   `TranslationWordCard`, `TranslationFinished`, `TranslationError`,
-   `ExcludedAppsChanged`. Map it to your platform's IPC (XPC, named pipe,
-   native messaging).
+   (see `clients/linux-qt/src/AppController.h`):
+
+   | Method | Role |
+   |---|---|
+   | `TranslateSelection(text, x, y)` | Selection path (action bar / Shell UI) |
+   | `TranslateSelectionWithContext(text, context, x, y)` | Same + dictionary context |
+   | `TranslateText(text)` | Hotkey/CLI: translate immediately (no bar) |
+   | `TranslateTextWithContext(text, context)` | Same + optional context |
+   | `TranslateClipboard()` | Translate the CLIPBOARD (Ctrl+C buffer) |
+   | `CancelTranslation()` | Abort in-flight request; hide UI |
+   | `SetShellUiEnabled(bool)` | GNOME Shell extension owns the panel |
+   | `ShowSettings()` | Open settings |
+   | `SpeakText(text)` | TTS via speech-dispatcher |
+   | `GetExcludedApps()` → `as` | WM_CLASS exclusion list |
+
+   Signals: `TranslationToken`, `TranslationWordCard`, `TranslationFinished`,
+   `TranslationError`, `ExcludedAppsChanged`.
+
+   CLI (same verbs, forwards to a running instance when present):
+   `translator --translate TEXT`, `translator --translate-clipboard`,
+   `translator --show-settings`, `translator --cancel`.
+
+   Map the interface to your platform's IPC (XPC, named pipe, native
+   messaging).
 
 ## providers.json
 

@@ -10,6 +10,8 @@
 #   4. Anthropic provider (x-api-key auth, /v1/messages, event stream)
 #   5. GetExcludedApps D-Bus round-trip and SpeakText crash-safety
 #   6. history.json written for successful requests only
+#   7. TranslateText control plane + CancelTranslation
+#   8. CLI secondary-instance forward (--translate to running app)
 #
 # Usage: clients/linux-qt/tests/e2e.sh [path-to-binary]
 #   (default: build/clients/linux-qt/translator)
@@ -122,6 +124,38 @@ gdbus call --session --dest org.translator.App --object-path /org/translator/App
     "This sentence is long enough to stream via the anthropic path" "" 100 100 > /dev/null
 sleep 3
 
+# Case 6: control plane — TranslateText (immediate, no selection coords).
+# Switch back to deepseek so we hit the OpenAI-compatible mock path again.
+kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
+cat > "$CONF" <<EOF
+[General]
+provider=deepseek
+targetLanguage=zh
+autoUpdate=false
+
+[deepseek]
+apiKey=test-key
+baseUrl=http://127.0.0.1:$PORT
+model=deepseek-v4-flash
+EOF
+"$BINARY" & APP=$!
+sleep 2
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.SetShellUiEnabled true > /dev/null
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.TranslateText \
+    "Control plane TranslateText sentence for the mock server" > /dev/null
+sleep 3
+
+# Case 7: CancelTranslation must not crash (op isolation is covered by
+# cargo tests; here we only check the D-Bus method is exported).
+gdbus call --session --dest org.translator.App --object-path /org/translator/App \
+    --method org.translator.App.CancelTranslation > /dev/null
+
+# Case 8: CLI secondary instance forwards --translate to the running app.
+"$BINARY" --translate "CLI forward sentence for the mock stream path"
+sleep 3
+
 kill "$APP" "$MON" 2>/dev/null
 INNER
 INNER_STATUS=$?
@@ -209,6 +243,22 @@ if "TranslationError" not in signals:
 if "unauthorized" not in signals and "401" not in signals:
     failures.append("error signal did not carry the 401 detail")
 
+# Control-plane + CLI-forward requests must have hit the mock.
+control_plane = next(
+    (r for r in openai_reqs
+     if "Control plane TranslateText" in r["body"]["messages"][-1]["content"]),
+    None,
+)
+if not control_plane:
+    failures.append("TranslateText control-plane request not seen by mock")
+cli_forward = next(
+    (r for r in openai_reqs
+     if "CLI forward sentence" in r["body"]["messages"][-1]["content"]),
+    None,
+)
+if not cli_forward:
+    failures.append("CLI --translate secondary-instance forward not seen by mock")
+
 # --- app exclusion list ----------------------------------------------------------
 with open(f"{work}/excluded.txt") as f:
     excluded = f.read()
@@ -240,5 +290,6 @@ if failures:
     for failure in failures:
         print(" -", failure)
     sys.exit(1)
-print("e2e: all cases pass (stream, phrase JSON, word card+context, 401, anthropic, exclusions, history)")
+print("e2e: all cases pass (stream, phrase JSON, word card+context, 401, anthropic, "
+      "exclusions, history, TranslateText, CLI forward)")
 EOF

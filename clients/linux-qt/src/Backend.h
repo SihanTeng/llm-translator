@@ -26,18 +26,20 @@ public:
     void configure(const ProviderInfo &provider, const QString &apiKey, const QString &model,
         const QString &baseUrlOverride = { });
 
-    // Starts a request, cancelling any in-flight one. Prompts and request
-    // decoration ("Text:"/"Sentence:") are built by the Rust side.
+    // Starts a request, cancelling any in-flight one (op isolation). Prompts
+    // and request decoration ("Text:"/"Sentence:") are built by the Rust side.
     void translate(const QString &text, const QString &context, const QString &targetLanguageName,
         bool jsonMode);
+    // Invalidates the active op; in-flight workers report cancelled and skip
+    // history. Bumps currentGeneration() so queued callbacks are dropped.
     void cancel();
 
-    // History is recorded by the Rust side on every successful request.
+    // History is recorded by the Rust side only for the winning op.
     [[nodiscard]] QString historyJson();
     void historyClear();
 
-    // GUI thread only: events from older requests must be dropped (the
-    // Rust cancel is asynchronous, so stale callbacks do arrive).
+    // GUI thread only: generation of the active request. Stale callbacks from
+    // superseded ops must be dropped (Rust cancel is async, so they arrive).
     [[nodiscard]] quint64 currentGeneration() const { return m_generation; }
 
 signals:

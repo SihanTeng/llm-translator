@@ -428,6 +428,31 @@ fn new_translate_cancels_in_flight_request() {
         .recv_timeout(Duration::from_secs(5))
         .expect("superseded request gets its on_done");
     assert_eq!(slow_done, (false, "cancelled".to_string()));
+
+    // Only the winning request lands in history (op isolation).
+    let history = history_entries(&backend);
+    assert_eq!(history.len(), 1, "superseded op must not write history");
+    assert_eq!(history[0]["source"], "Translate this sentence.");
+}
+
+#[test]
+fn cancel_then_idle_invalidates_without_new_translate() {
+    let server = MockServer::start();
+    let backend = Backend::new(temp_dir("cancel-idle"));
+    backend.configure("deepseek", EXPECT_KEY, "deepseek-v4-flash", &server.url());
+
+    let (sink, rx_tokens, rx_done) = channels();
+    backend.translate("slow text please", "", "Simplified Chinese", false, sink);
+    assert_eq!(
+        rx_tokens.recv_timeout(Duration::from_secs(5)).as_deref(),
+        Ok("first")
+    );
+    backend.cancel();
+    assert_eq!(
+        rx_done.recv_timeout(Duration::from_secs(5)).expect("done"),
+        (false, "cancelled".to_string())
+    );
+    assert!(history_entries(&backend).is_empty());
 }
 
 #[test]

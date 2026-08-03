@@ -40,6 +40,25 @@ public slots:
     // extension versions calling the 3-arg form keep working.
     void TranslateSelectionWithContext(const QString &text, const QString &context, int x, int y);
 
+    // Hotkey / CLI control plane: translate immediately (no action bar).
+    // Intent is already confirmed by the user binding. Empty text is ignored.
+    void TranslateText(const QString &text);
+
+    // Same as TranslateText with an optional containing sentence for
+    // dictionary-mode context.
+    void TranslateTextWithContext(const QString &text, const QString &context);
+
+    // Translate the CLIPBOARD selection (Ctrl+C buffer), not PRIMARY.
+    // Bind via GNOME Settings → Keyboard → Custom Shortcut, e.g.:
+    //   gdbus call --session --dest org.translator.App \
+    //     --object-path /org/translator/App \
+    //     --method org.translator.App.TranslateClipboard
+    // or: translator --translate-clipboard
+    void TranslateClipboard();
+
+    // Abort the in-flight request (if any) and hide the popup / action bar.
+    void CancelTranslation();
+
     // Called by the GNOME Shell extension when it loads/unloads. When
     // enabled, the app renders no Qt UI for D-Bus-triggered translations;
     // the extension renders the action bar and translation panel itself
@@ -98,6 +117,10 @@ private:
     QString m_pendingContext;
     QPoint m_pendingPos;
     bool m_shellUiEnabled = false;
+    // Generation of the Backend request currently driving UI / D-Bus signals.
+    // Stale callbacks are already dropped in Backend; this guards m_jsonMode /
+    // m_jsonBuffer against any residual cross-request races.
+    quint64 m_activeGeneration = 0;
     bool m_jsonMode = false;
     QString m_jsonBuffer;
 };

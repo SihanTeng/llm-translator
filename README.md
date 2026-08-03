@@ -106,6 +106,34 @@ workaround, XWayland selections are still visible via the X11 path).
 5. The tray icon (where a tray is available) opens History or Settings, or
    quits.
 
+### Hotkeys and CLI (control plane)
+
+Selection already uses the action bar; for a global shortcut (the Wayland-safe
+path) bind an OS custom key to one of:
+
+```sh
+# Clipboard (Ctrl+C buffer) — most useful hotkey
+translator --translate-clipboard
+# or without a second process if the app is already running:
+gdbus call --session --dest org.translator.App \
+  --object-path /org/translator/App \
+  --method org.translator.App.TranslateClipboard
+
+# Arbitrary text
+translator --translate 'Hello world'
+gdbus call --session --dest org.translator.App \
+  --object-path /org/translator/App \
+  --method org.translator.App.TranslateText 'Hello world'
+
+translator --show-settings
+translator --cancel
+```
+
+`translator` is single-instance on the session bus: a second invocation with
+`--translate*` / `--show-settings` / `--cancel` forwards to the running app
+and exits. If nothing is running, the binary starts the app and runs the
+verb. On GNOME: Settings → Keyboard → Custom Shortcuts.
+
 The app does **not** start at login. On GNOME Wayland the Shell extension
 stays loaded, but it only D-Bus-activates the backend when you click the
 Translate bar (or open Settings from the panel). Quit from the tray anytime;

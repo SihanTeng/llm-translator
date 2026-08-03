@@ -9,7 +9,7 @@ use crate::wordcard::{extract_json_payload, WordCard};
 use std::io::{BufRead, BufReader};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use ureq::Agent;
@@ -75,12 +75,26 @@ impl Default for RequestTimeouts {
 struct Shared {
     agent: Agent,
     config: Mutex<ConfigState>,
-    cancel: Mutex<Arc<AtomicBool>>,
+    /// Monotonic op id of the in-flight request (0 = none ever started).
+    /// Bumped on every `translate` and `cancel` so superseded workers stop
+    /// emitting tokens, skip history, and report `cancelled`.
+    active_op: AtomicU64,
     history: Mutex<HistoryStore>,
 }
 
+impl Shared {
+    fn is_current(&self, op: u64) -> bool {
+        self.active_op.load(Ordering::SeqCst) == op
+    }
+
+    /// Invalidates any in-flight op and returns the new current id.
+    fn begin_op(&self) -> u64 {
+        self.active_op.fetch_add(1, Ordering::SeqCst) + 1
+    }
+}
+
 /// The backend instance behind the `TbBackend` handle. Owns the HTTP agent,
-/// the current configuration, the in-flight request's cancel flag and the
+/// the current configuration, the active request generation, and the
 /// history store.
 pub struct Backend {
     shared: Arc<Shared>,
@@ -107,7 +121,7 @@ impl Backend {
             shared: Arc::new(Shared {
                 agent: Agent::new_with_config(config),
                 config: Mutex::new(ConfigState::Unconfigured),
-                cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
+                active_op: AtomicU64::new(0),
                 history: Mutex::new(HistoryStore::new(data_dir.join("history.json"))),
             }),
         }
@@ -144,22 +158,17 @@ impl Backend {
         *lock(&self.shared.config) = state;
     }
 
-    /// Flags the in-flight request (if any) to stop; its worker reports
-    /// `on_done(false, "cancelled")` when it observes the flag.
+    /// Invalidates the in-flight request (if any); its worker reports
+    /// `on_done(false, "cancelled")` when it next checks the op id.
     pub fn cancel(&self) {
-        lock(&self.shared.cancel).store(true, Ordering::SeqCst);
+        let _ = self.shared.begin_op();
     }
 
     /// Starts a request on a fresh worker thread, cancelling any in-flight
     /// one first. Exactly one `sink.on_done` will fire for this call.
+    /// Superseded ops never write history and only report `cancelled`.
     pub fn translate(&self, text: &str, context: &str, target: &str, json_mode: bool, sink: Sink) {
-        let flag = {
-            let mut slot = lock(&self.shared.cancel);
-            slot.store(true, Ordering::SeqCst);
-            let flag = Arc::new(AtomicBool::new(false));
-            *slot = Arc::clone(&flag);
-            flag
-        };
+        let op = self.shared.begin_op();
         let state = lock(&self.shared.config).clone();
         let shared = Arc::clone(&self.shared);
         let text = text.to_string();
@@ -168,12 +177,19 @@ impl Backend {
         std::thread::spawn(move || {
             let panicked = catch_unwind(AssertUnwindSafe(|| {
                 run(
-                    &shared, &state, &text, &context, &target, json_mode, &flag, &sink,
+                    &shared, &state, &text, &context, &target, json_mode, op, &sink,
                 );
             }))
             .is_err();
             if panicked {
-                sink.done(false, "Internal backend error");
+                // Only report a panic if this op is still current — a
+                // superseded worker's unwind must not fake an error for the
+                // newer request.
+                if shared.is_current(op) {
+                    sink.done(false, "Internal backend error");
+                } else {
+                    sink.done(false, "cancelled");
+                }
             }
         });
     }
@@ -322,6 +338,11 @@ fn parse_openai_message_content(body: &str) -> String {
         .to_string()
 }
 
+/// Terminal for a superseded op: always `cancelled`, never history.
+fn cancelled(sink: &Sink) {
+    sink.done(false, "cancelled");
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run(
     shared: &Shared,
@@ -330,17 +351,39 @@ fn run(
     context: &str,
     target: &str,
     json_mode: bool,
-    cancel: &AtomicBool,
+    op: u64,
     sink: &Sink,
 ) {
+    // Config/key failures still report for this op only if it is current —
+    // a supersede between spawn and run must not surface as a real error.
+    if !shared.is_current(op) {
+        return cancelled(sink);
+    }
+
     let cfg = match state {
         ConfigState::Ready(cfg) => cfg,
-        ConfigState::Invalid(message) => return sink.done(false, message),
-        ConfigState::Unconfigured => return sink.done(false, "No provider configured"),
+        ConfigState::Invalid(message) => {
+            return if shared.is_current(op) {
+                sink.done(false, message);
+            } else {
+                cancelled(sink);
+            };
+        }
+        ConfigState::Unconfigured => {
+            return if shared.is_current(op) {
+                sink.done(false, "No provider configured");
+            } else {
+                cancelled(sink);
+            };
+        }
     };
 
     if cfg.api_key.is_empty() {
-        return sink.done(false, &missing_key_message(cfg.provider));
+        return if shared.is_current(op) {
+            sink.done(false, &missing_key_message(cfg.provider));
+        } else {
+            cancelled(sink);
+        };
     }
 
     let system_prompt = if json_mode {
@@ -366,18 +409,27 @@ fn run(
     }
     let mut response = match builder.send(request.body.into_bytes()) {
         Ok(response) => response,
-        Err(err) => return sink.done(false, &format!("Network error: {err}")),
+        Err(err) => {
+            return if shared.is_current(op) {
+                sink.done(false, &format!("Network error: {err}"));
+            } else {
+                cancelled(sink);
+            };
+        }
     };
 
-    // A cancel during connect/send takes effect before any body read — this
-    // is the only pre-read checkpoint for non-streamed requests.
-    if cancel.load(Ordering::SeqCst) {
-        return sink.done(false, "cancelled");
+    // A supersede during connect/send takes effect before any body read —
+    // the only pre-read checkpoint for non-streamed requests.
+    if !shared.is_current(op) {
+        return cancelled(sink);
     }
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let body = response.body_mut().read_to_string().unwrap_or_default();
+        if !shared.is_current(op) {
+            return cancelled(sink);
+        }
         let detail = clipped(&body, 300);
         let message = format!(
             "{} request failed (HTTP {status}): {detail}",
@@ -390,12 +442,18 @@ fn run(
     if request.streamed {
         let mut lines = BufReader::new(response.body_mut().as_reader()).lines();
         loop {
-            if cancel.load(Ordering::SeqCst) {
-                return sink.done(false, "cancelled");
+            if !shared.is_current(op) {
+                return cancelled(sink);
             }
             let line = match lines.next() {
                 Some(Ok(line)) => line,
-                Some(Err(err)) => return sink.done(false, &format!("Network error: {err}")),
+                Some(Err(err)) => {
+                    return if shared.is_current(op) {
+                        sink.done(false, &format!("Network error: {err}"));
+                    } else {
+                        cancelled(sink);
+                    };
+                }
                 None => break,
             };
             let Some(payload) = line.strip_prefix("data:") else {
@@ -414,6 +472,10 @@ fn run(
             if delta.is_empty() {
                 continue;
             }
+            // Re-check after parse: a supersede mid-token must not leak UI.
+            if !shared.is_current(op) {
+                return cancelled(sink);
+            }
             accumulated.push_str(&delta);
             if !json_mode {
                 sink.token(&delta);
@@ -422,12 +484,18 @@ fn run(
     } else {
         match response.body_mut().read_to_string() {
             Ok(body) => accumulated = parse_openai_message_content(&body),
-            Err(err) => return sink.done(false, &format!("Network error: {err}")),
+            Err(err) => {
+                return if shared.is_current(op) {
+                    sink.done(false, &format!("Network error: {err}"));
+                } else {
+                    cancelled(sink);
+                };
+            }
         }
     }
 
-    if cancel.load(Ordering::SeqCst) {
-        return sink.done(false, "cancelled");
+    if !shared.is_current(op) {
+        return cancelled(sink);
     }
 
     // Word mode delivers the whole structured reply as a single token,
@@ -435,6 +503,9 @@ fn run(
     let final_text = if json_mode {
         let canonical = extract_json_payload(&accumulated);
         if !canonical.is_empty() {
+            if !shared.is_current(op) {
+                return cancelled(sink);
+            }
             sink.token(&canonical);
         }
         canonical
@@ -451,7 +522,16 @@ fn run(
     } else {
         final_text
     };
-    lock(&shared.history).add(text, &translation);
+
+    // History only while still the active op — prevents a just-superseded
+    // worker from polluting the store after a newer translate began.
+    {
+        let mut history = lock(&shared.history);
+        if !shared.is_current(op) {
+            return cancelled(sink);
+        }
+        history.add(text, &translation);
+    }
 
     sink.done(true, "");
 }

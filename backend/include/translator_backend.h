@@ -33,7 +33,8 @@ void tb_backend_free(TbBackend *backend);
 void tb_backend_configure(TbBackend *backend, const char *provider_id, const char *api_key,
     const char *model, const char *base_url_override);
 
-// Starts a request on a worker thread, cancelling any in-flight one.
+// Starts a request on a worker thread, cancelling any in-flight one via an
+// op-id bump (superseded workers report cancelled and never write history).
 //   text: raw selected text; context: containing sentence or "".
 //   target_language_name: English name ("Simplified Chinese").
 //   json_mode: short-selection mode (dictionary card / phrase JSON).
@@ -41,6 +42,7 @@ void tb_backend_configure(TbBackend *backend, const char *provider_id, const cha
 void tb_backend_translate(TbBackend *backend, const char *text, const char *context,
     const char *target_language_name, bool json_mode, TbTokenFn on_token, TbDoneFn on_done,
     void *ctx);
+// Invalidates the active op; the worker reports on_done(false, "cancelled").
 void tb_backend_cancel(TbBackend *backend);
 
 // History as a JSON string ([{"ts":..,"source":..,"translation":..}], newest
